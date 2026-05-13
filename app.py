@@ -103,15 +103,30 @@ def ordenar_rotas_por_preferencia(rotas: List[str]) -> List[str]:
     rotas_preferidas.sort(key=lambda x: x[0])
     return [rota for _, rota in rotas_preferidas] + rotas_restantes
 
+
+def _playwright_launch_args() -> dict:
+    """Argumentos estáveis para rodar Chromium em ambiente de container/cloud."""
+    return {
+        "headless": True,
+        "args": [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+        ],
+    }
+
 async def obter_rotas_disponiveis(url: str, progress_placeholder):
     """Extrai rotas disponíveis do formulário."""
     garantir_chromium_playwright()
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
+        browser = None
         
         try:
+            browser = await p.chromium.launch(**_playwright_launch_args())
+            page = await browser.new_page()
+
             progress_placeholder.info("📄 Abrindo formulário...")
             await page.goto(url, wait_until="networkidle")
             
@@ -156,17 +171,20 @@ async def obter_rotas_disponiveis(url: str, progress_placeholder):
             return []
         
         finally:
-            await browser.close()
+            if browser:
+                await browser.close()
 
 async def enviar_formulario(url: str, rota: str, progress_placeholder, index: int, total: int) -> bool:
     """Envia o formulário para uma rota específica."""
     garantir_chromium_playwright()
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
+        browser = None
         
         try:
+            browser = await p.chromium.launch(**_playwright_launch_args())
+            page = await browser.new_page()
+
             progress_placeholder.info(f"📨 [{index}/{total}] Enviando: {rota}...")
             await page.goto(url, wait_until="networkidle")
             
@@ -222,7 +240,8 @@ async def enviar_formulario(url: str, rota: str, progress_placeholder, index: in
             return False
         
         finally:
-            await browser.close()
+            if browser:
+                await browser.close()
 
 # ==================== UI ====================
 
