@@ -141,7 +141,8 @@ async def obter_rotas_disponiveis(url: str, progress_placeholder):
             avancar_btn = await page.query_selector("//span[normalize-space(text())='Avançar' or normalize-space(text())='Próxima']")
             if avancar_btn:
                 await avancar_btn.click()
-            await page.wait_for_timeout(2000)
+            await page.wait_for_timeout(2500)
+            await page.wait_for_selector("//*[@role='listbox']", timeout=20000)
             
             # Página 2: Abrir dropdown
             progress_placeholder.info("🔍 Extraindo rotas disponíveis...")
@@ -151,17 +152,21 @@ async def obter_rotas_disponiveis(url: str, progress_placeholder):
                 await page.wait_for_timeout(1000)
             
             # Extrair opções
-            opcoes = await page.query_selector_all("//*[@role='option']")
+            opcoes = await page.query_selector_all("//*[@role='listbox']//*[@role='option'] | //*[@role='option'] | //select/option")
             rotas = []
+            rotas_unicas = set()
             
             meus_bairros_limpos = [remover_acentos(b) for b in MEUS_BAIRROS]
             
             for opcao in opcoes:
                 texto = await opcao.inner_text()
                 if texto and texto.strip().lower() != "escolher":
-                    texto_limpo = remover_acentos(texto)
+                    texto_normalizado = " ".join(texto.split()).strip()
+                    texto_limpo = remover_acentos(texto_normalizado)
                     if any(b_limpo in texto_limpo for b_limpo in meus_bairros_limpos):
-                        rotas.append(texto.strip())
+                        if texto_limpo not in rotas_unicas:
+                            rotas_unicas.add(texto_limpo)
+                            rotas.append(texto_normalizado)
             
             progress_placeholder.success(f"✅ {len(rotas)} rotas encontradas!")
             return rotas
@@ -196,7 +201,8 @@ async def enviar_formulario(url: str, rota: str, progress_placeholder, index: in
             avancar_btn = await page.query_selector("//span[normalize-space(text())='Avançar' or normalize-space(text())='Próxima']")
             if avancar_btn:
                 await avancar_btn.click()
-            await page.wait_for_timeout(2000)
+            await page.wait_for_timeout(2500)
+            await page.wait_for_selector("//*[@role='listbox']", timeout=20000)
             
             # Página 2: Selecionar rota
             dropdown = await page.query_selector("//*[@role='listbox']")
@@ -205,7 +211,7 @@ async def enviar_formulario(url: str, rota: str, progress_placeholder, index: in
                 await page.wait_for_timeout(1000)
             
             opcao = None
-            opcoes = await page.query_selector_all("//*[@role='option']")
+            opcoes = await page.query_selector_all("//*[@role='listbox']//*[@role='option'] | //*[@role='option'] | //select/option")
             rota_limpa = remover_acentos(rota)
             for op in opcoes:
                 texto_opcao = (await op.inner_text()).strip()
