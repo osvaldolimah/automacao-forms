@@ -22,19 +22,13 @@ if os.name == "nt":
 
 
 @st.cache_resource(show_spinner=False)
-def garantir_chromium_playwright() -> str:
+def garantir_chromium_playwright() -> None:
     """Garante que o Chromium do Playwright esteja disponível no ambiente."""
-    from playwright.sync_api import sync_playwright
-
-    with sync_playwright() as playwright_sync:
-        executable = Path(playwright_sync.chromium.executable_path)
-        if executable.exists():
-            return str(executable)
+    browsers_path = Path(os.getenv("PLAYWRIGHT_BROWSERS_PATH", str(Path.home() / ".cache" / "ms-playwright")))
+    if any(browsers_path.glob("chromium-*")):
+        return
 
     subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
-
-    with sync_playwright() as playwright_sync:
-        return str(Path(playwright_sync.chromium.executable_path))
 
 
 def executar_corrotina(corrotina):
