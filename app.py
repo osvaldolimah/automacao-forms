@@ -73,6 +73,11 @@ def remover_acentos(texto: str) -> str:
     nfd = unicodedata.normalize('NFD', texto)
     return ''.join(c for c in nfd if unicodedata.category(c) != 'Mn').lower()
 
+
+def normalizar_texto(texto: str) -> str:
+    """Normaliza espaços extras para comparação estável."""
+    return " ".join((texto or "").split()).strip()
+
 def validar_url(url: str) -> bool:
     """Valida URL do formulário Google."""
     try:
@@ -150,6 +155,7 @@ async def obter_rotas_disponiveis(url: str, progress_placeholder):
             if dropdown:
                 await dropdown.click()
                 await page.wait_for_timeout(1000)
+            await page.wait_for_selector("//*[@role='option'] | //select/option", timeout=10000)
             
             # Extrair opções
             opcoes = await page.query_selector_all("//*[@role='listbox']//*[@role='option'] | //*[@role='option'] | //select/option")
@@ -159,9 +165,10 @@ async def obter_rotas_disponiveis(url: str, progress_placeholder):
             meus_bairros_limpos = [remover_acentos(b) for b in MEUS_BAIRROS]
             
             for opcao in opcoes:
-                texto = await opcao.inner_text()
-                if texto and texto.strip().lower() != "escolher":
-                    texto_normalizado = " ".join(texto.split()).strip()
+                texto_attr = await opcao.get_attribute("data-value")
+                texto_inner = await opcao.inner_text()
+                texto_normalizado = normalizar_texto(texto_attr or texto_inner)
+                if texto_normalizado and remover_acentos(texto_normalizado) != "escolher":
                     texto_limpo = remover_acentos(texto_normalizado)
                     if any(b_limpo in texto_limpo for b_limpo in meus_bairros_limpos):
                         if texto_limpo not in rotas_unicas:
@@ -209,22 +216,28 @@ async def enviar_formulario(url: str, rota: str, progress_placeholder, index: in
             if dropdown:
                 await dropdown.click()
                 await page.wait_for_timeout(1000)
+            await page.wait_for_selector("//*[@role='option'] | //select/option", timeout=10000)
             
             opcao = None
             opcoes = await page.query_selector_all("//*[@role='listbox']//*[@role='option'] | //*[@role='option'] | //select/option")
             rota_limpa = remover_acentos(rota)
             for op in opcoes:
-                texto_opcao = (await op.inner_text()).strip()
+                texto_attr = await op.get_attribute("data-value")
+                texto_inner = await op.inner_text()
+                texto_opcao = normalizar_texto(texto_attr or texto_inner)
                 if remover_acentos(texto_opcao) == rota_limpa:
                     opcao = op
                     break
             if not opcao:
                 for op in opcoes:
-                    texto_opcao = (await op.inner_text()).strip()
+                    texto_attr = await op.get_attribute("data-value")
+                    texto_inner = await op.inner_text()
+                    texto_opcao = normalizar_texto(texto_attr or texto_inner)
                     if rota_limpa in remover_acentos(texto_opcao):
                         opcao = op
                         break
             if opcao:
+                await opcao.scroll_into_view_if_needed()
                 await opcao.click()
             await page.wait_for_timeout(1000)
             
