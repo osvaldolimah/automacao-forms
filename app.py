@@ -170,12 +170,13 @@ async def obter_rotas_disponiveis(url: str, progress_placeholder):
             
             # Página 1: Preencher nome e ID
             progress_placeholder.info("✍️ Preenchendo identificação...")
-            inputs = await page.query_selector_all("input[type='text'], input[type='number']")
-            if len(inputs) < 2:
-                progress_placeholder.error("❌ Não foi possível localizar os 2 campos de identificação")
+            inputs_locator = page.locator("input[type='text'], input[type='tel'], input[type='number']")
+            count_inputs = await inputs_locator.count()
+            if count_inputs < 2:
+                progress_placeholder.error(f"❌ Não foi possível localizar os 2 campos de identificação (encontrados: {count_inputs})")
                 return []
-            await inputs[0].fill(NOME)
-            await inputs[1].fill(ID_FUNC)
+            await inputs_locator.nth(0).fill(NOME)
+            await inputs_locator.nth(1).fill(ID_FUNC)
             
             # Clicar em Avançar
             progress_placeholder.info("⬜ Avançando para próxima página...")
@@ -236,12 +237,13 @@ async def enviar_formulario(url: str, rota: str, progress_placeholder, index: in
             await page.goto(url, wait_until="networkidle")
             
             # Página 1
-            inputs = await page.query_selector_all("input[type='text'], input[type='number']")
-            if len(inputs) < 2:
-                progress_placeholder.error(f"❌ [{index}/{total}] Campos de identificação não encontrados")
+            inputs_locator = page.locator("input[type='text'], input[type='tel'], input[type='number']")
+            count_inputs = await inputs_locator.count()
+            if count_inputs < 2:
+                progress_placeholder.error(f"❌ [{index}/{total}] Campos de identificação não encontrados (encontrados: {count_inputs})")
                 return False
-            await inputs[0].fill(NOME)
-            await inputs[1].fill(ID_FUNC)
+            await inputs_locator.nth(0).fill(NOME)
+            await inputs_locator.nth(1).fill(ID_FUNC)
             
             avancou = await ir_para_pagina_rotas(page)
             if not avancou:
@@ -285,8 +287,12 @@ async def enviar_formulario(url: str, rota: str, progress_placeholder, index: in
             await page.wait_for_timeout(2000)
             
             # Página 3: Telefone
-            inputs = await page.query_selector_all("input[type='text']")
-            await inputs[0].fill(TELEFONE)
+            inputs_tel = page.locator("input[type='tel'], input[type='text'], input[type='number']")
+            count_tel = await inputs_tel.count()
+            if count_tel == 0:
+                progress_placeholder.error(f"❌ [{index}/{total}] Campo de telefone nao encontrado (encontrados: {count_tel})")
+                return False
+            await inputs_tel.nth(0).fill(TELEFONE)
             
             # Enviar
             enviar_btn = await page.query_selector("//span[normalize-space(text())='Enviar']")
