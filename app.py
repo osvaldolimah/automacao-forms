@@ -7,6 +7,9 @@ import streamlit as st
 import asyncio
 import unicodedata
 import os
+import subprocess
+import sys
+from pathlib import Path
 from typing import List
 from urllib.parse import urlparse
 from dotenv import load_dotenv
@@ -16,6 +19,22 @@ from playwright.async_api import async_playwright
 
 if os.name == "nt":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
+
+@st.cache_resource(show_spinner=False)
+def garantir_chromium_playwright() -> str:
+    """Garante que o Chromium do Playwright esteja disponível no ambiente."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright_sync:
+        executable = Path(playwright_sync.chromium.executable_path)
+        if executable.exists():
+            return str(executable)
+
+    subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
+
+    with sync_playwright() as playwright_sync:
+        return str(Path(playwright_sync.chromium.executable_path))
 
 
 def executar_corrotina(corrotina):
@@ -92,6 +111,8 @@ def ordenar_rotas_por_preferencia(rotas: List[str]) -> List[str]:
 
 async def obter_rotas_disponiveis(url: str, progress_placeholder):
     """Extrai rotas disponíveis do formulário."""
+    garantir_chromium_playwright()
+
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
@@ -145,6 +166,8 @@ async def obter_rotas_disponiveis(url: str, progress_placeholder):
 
 async def enviar_formulario(url: str, rota: str, progress_placeholder, index: int, total: int) -> bool:
     """Envia o formulário para uma rota específica."""
+    garantir_chromium_playwright()
+
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
