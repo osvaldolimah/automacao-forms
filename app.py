@@ -121,6 +121,39 @@ def _playwright_launch_args() -> dict:
         ],
     }
 
+
+async def ir_para_pagina_rotas(page) -> bool:
+    """Avança para a página de rotas com fallback de seletores e idioma."""
+    if await page.locator("[role='listbox'], select").count() > 0:
+        return True
+
+    seletores_avancar = [
+        "xpath=(//span[normalize-space()='Avançar' or normalize-space()='Próxima' or normalize-space()='Next']/ancestor::*[@role='button'][1])[1]",
+        "xpath=(//div[@role='button'][.//span[normalize-space()='Avançar' or normalize-space()='Próxima' or normalize-space()='Next']])[1]",
+        "xpath=(//*[@role='button' and (@aria-label='Avançar' or @aria-label='Próxima' or @aria-label='Next')])[1]",
+    ]
+
+    clicou = False
+    for seletor in seletores_avancar:
+        alvo = page.locator(seletor)
+        if await alvo.count() > 0:
+            try:
+                await alvo.first.click(timeout=5000)
+                clicou = True
+                break
+            except Exception:
+                continue
+
+    if not clicou:
+        return False
+
+    for _ in range(30):
+        if await page.locator("[role='listbox'], select").count() > 0:
+            return True
+        await page.wait_for_timeout(1000)
+
+    return False
+
 async def obter_rotas_disponiveis(url: str, progress_placeholder):
     """Extrai rotas disponíveis do formulário."""
     garantir_chromium_playwright()
@@ -137,21 +170,23 @@ async def obter_rotas_disponiveis(url: str, progress_placeholder):
             
             # Página 1: Preencher nome e ID
             progress_placeholder.info("✍️ Preenchendo identificação...")
-            inputs = await page.query_selector_all("input[type='text']")
+            inputs = await page.query_selector_all("input[type='text'], input[type='number']")
+            if len(inputs) < 2:
+                progress_placeholder.error("❌ Não foi possível localizar os 2 campos de identificação")
+                return []
             await inputs[0].fill(NOME)
             await inputs[1].fill(ID_FUNC)
             
             # Clicar em Avançar
             progress_placeholder.info("⬜ Avançando para próxima página...")
-            avancar_btn = await page.query_selector("//span[normalize-space(text())='Avançar' or normalize-space(text())='Próxima']")
-            if avancar_btn:
-                await avancar_btn.click()
-            await page.wait_for_timeout(2500)
-            await page.wait_for_selector("//*[@role='listbox']", timeout=20000)
+            avancou = await ir_para_pagina_rotas(page)
+            if not avancou:
+                progress_placeholder.error("❌ Não foi possível avançar para a página de rotas")
+                return []
             
             # Página 2: Abrir dropdown
             progress_placeholder.info("🔍 Extraindo rotas disponíveis...")
-            dropdown = await page.query_selector("//*[@role='listbox']")
+            dropdown = await page.query_selector("//*[@role='listbox'] | //select")
             if dropdown:
                 await dropdown.click()
                 await page.wait_for_timeout(1000)
@@ -201,18 +236,20 @@ async def enviar_formulario(url: str, rota: str, progress_placeholder, index: in
             await page.goto(url, wait_until="networkidle")
             
             # Página 1
-            inputs = await page.query_selector_all("input[type='text']")
+            inputs = await page.query_selector_all("input[type='text'], input[type='number']")
+            if len(inputs) < 2:
+                progress_placeholder.error(f"❌ [{index}/{total}] Campos de identificação não encontrados")
+                return False
             await inputs[0].fill(NOME)
             await inputs[1].fill(ID_FUNC)
             
-            avancar_btn = await page.query_selector("//span[normalize-space(text())='Avançar' or normalize-space(text())='Próxima']")
-            if avancar_btn:
-                await avancar_btn.click()
-            await page.wait_for_timeout(2500)
-            await page.wait_for_selector("//*[@role='listbox']", timeout=20000)
+            avancou = await ir_para_pagina_rotas(page)
+            if not avancou:
+                progress_placeholder.error(f"❌ [{index}/{total}] Não foi possível acessar a página de rotas")
+                return False
             
             # Página 2: Selecionar rota
-            dropdown = await page.query_selector("//*[@role='listbox']")
+            dropdown = await page.query_selector("//*[@role='listbox'] | //select")
             if dropdown:
                 await dropdown.click()
                 await page.wait_for_timeout(1000)
