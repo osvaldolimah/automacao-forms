@@ -145,23 +145,23 @@ async def obter_rotas_disponiveis(url: str, progress_placeholder):
             
             # Página 2: Abrir dropdown
             progress_placeholder.info("🔍 Extraindo rotas disponíveis...")
-            dropdown = await page.query_selector("//div[@role='listbox']")
+            dropdown = await page.query_selector("//*[@role='listbox']")
             if dropdown:
                 await dropdown.click()
                 await page.wait_for_timeout(1000)
             
             # Extrair opções
-            opcoes = await page.query_selector_all("//div[@role='option']")
+            opcoes = await page.query_selector_all("//*[@role='option']")
             rotas = []
             
             meus_bairros_limpos = [remover_acentos(b) for b in MEUS_BAIRROS]
             
             for opcao in opcoes:
                 texto = await opcao.inner_text()
-                if texto and texto != "Escolher":
+                if texto and texto.strip().lower() != "escolher":
                     texto_limpo = remover_acentos(texto)
                     if any(b_limpo in texto_limpo for b_limpo in meus_bairros_limpos):
-                        rotas.append(texto)
+                        rotas.append(texto.strip())
             
             progress_placeholder.success(f"✅ {len(rotas)} rotas encontradas!")
             return rotas
@@ -199,12 +199,25 @@ async def enviar_formulario(url: str, rota: str, progress_placeholder, index: in
             await page.wait_for_timeout(2000)
             
             # Página 2: Selecionar rota
-            dropdown = await page.query_selector("//div[@role='listbox']")
+            dropdown = await page.query_selector("//*[@role='listbox']")
             if dropdown:
                 await dropdown.click()
                 await page.wait_for_timeout(1000)
             
-            opcao = await page.query_selector(f"//div[@role='option']//span[text()='{rota}']")
+            opcao = None
+            opcoes = await page.query_selector_all("//*[@role='option']")
+            rota_limpa = remover_acentos(rota)
+            for op in opcoes:
+                texto_opcao = (await op.inner_text()).strip()
+                if remover_acentos(texto_opcao) == rota_limpa:
+                    opcao = op
+                    break
+            if not opcao:
+                for op in opcoes:
+                    texto_opcao = (await op.inner_text()).strip()
+                    if rota_limpa in remover_acentos(texto_opcao):
+                        opcao = op
+                        break
             if opcao:
                 await opcao.click()
             await page.wait_for_timeout(1000)
