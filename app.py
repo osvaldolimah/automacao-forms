@@ -14,6 +14,21 @@ from dotenv import load_dotenv
 # Importar playwright
 from playwright.async_api import async_playwright
 
+if os.name == "nt":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
+
+def executar_corrotina(corrotina):
+    """Executa corrotinas usando loop Proactor no Windows para suportar subprocessos."""
+    if os.name == "nt":
+        loop = asyncio.ProactorEventLoop()
+        try:
+            asyncio.set_event_loop(loop)
+            return loop.run_until_complete(corrotina)
+        finally:
+            loop.close()
+    return asyncio.run(corrotina)
+
 # ==================== CONFIGURAÇÃO ====================
 st.set_page_config(page_title="Automação Forms", layout="centered", initial_sidebar_state="collapsed")
 
@@ -235,7 +250,7 @@ if executar:
     
     # Obter rotas
     progress_placeholder.info("🔍 Extraindo rotas disponíveis...")
-    rotas = asyncio.run(obter_rotas_disponiveis(url, progress_placeholder))
+    rotas = executar_corrotina(obter_rotas_disponiveis(url, progress_placeholder))
     
     if not rotas:
         st.error("❌ Nenhuma rota compatível encontrada no formulário")
@@ -254,7 +269,7 @@ if executar:
     
     for idx, rota in enumerate(rotas_ordenadas, 1):
         progress_placeholder = st.empty()
-        sucesso = asyncio.run(enviar_formulario(url, rota, progress_placeholder, idx, len(rotas_ordenadas)))
+        sucesso = executar_corrotina(enviar_formulario(url, rota, progress_placeholder, idx, len(rotas_ordenadas)))
         
         resultados.append({
             'rota': rota,
