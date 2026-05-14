@@ -274,12 +274,12 @@ def obter_rotas_disponiveis(
         time.sleep(1)
         log("Procurando botão 'Avançar'...", "MAP")
         
-        # Múltiplos XPaths para localizar o botão
+        # Múltiplos XPaths para localizar o botão (PT e EN)
         xpath_variants = [
-            "//span[normalize-space(text())='Avançar' or normalize-space(text())='Próxima']",
-            "//button//span[contains(text(), 'Avançar')] | //button//span[contains(text(), 'Próxima')]",
-            "//span[contains(text(), 'Avançar')] | //span[contains(text(), 'Próxima')]",
-            "//*[normalize-space(text())='Avançar'] | //*[normalize-space(text())='Próxima']"
+            "//span[normalize-space(text())='Avançar' or normalize-space(text())='Próxima' or normalize-space(text())='Next']",
+            "//button//span[contains(text(), 'Avançar') or contains(text(), 'Próxima') or contains(text(), 'Next')]",
+            "//span[contains(text(), 'Avançar') or contains(text(), 'Próxima') or contains(text(), 'Next')]",
+            "//*[normalize-space(text())='Avançar' or normalize-space(text())='Próxima' or normalize-space(text())='Next']"
         ]
         
         btn = None
@@ -301,17 +301,17 @@ def obter_rotas_disponiveis(
             # Debugging: listar todos os spans na página
             all_spans = driver.find_elements(By.TAG_NAME, "span")
             log(f"⚠️ Botão não encontrado. Existem {len(all_spans)} spans na página.", "DEBUG")
-            for i, span in enumerate(all_spans[:5]):
+            for i, span in enumerate(all_spans[:10]):
                 try:
                     text = span.text.strip()
                     if text:
                         log(f"  Span {i}: '{text[:40]}'", "DEBUG")
                 except:
                     pass
-            raise Exception("Botão 'Avançar' não localizado em nenhum XPath")
+            raise Exception("Botão 'Avançar/Next' não localizado em nenhum XPath")
         
         try:
-            log("✅ Botão 'Avançar' localizado", "MAP")
+            log("✅ Botão 'Avançar/Next' localizado", "MAP")
             # Scroll até o botão
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", btn)
             time.sleep(0.5)
@@ -388,7 +388,7 @@ def enviar_formulario(
         preencher_input(driver, wait, 0, nome)
         preencher_input(driver, wait, 1, id_func)
         btn = wait.until(EC.element_to_be_clickable(
-            (By.XPATH, "//span[normalize-space(text())='Avançar' or normalize-space(text())='Próxima']")
+            (By.XPATH, "//span[normalize-space(text())='Avançar' or normalize-space(text())='Próxima' or normalize-space(text())='Next']")
         ))
         safe_click(driver, btn)
 
@@ -403,7 +403,7 @@ def enviar_formulario(
         safe_click(driver, opcao)
         time.sleep(1)
         btn2 = wait.until(EC.element_to_be_clickable(
-            (By.XPATH, "//span[normalize-space(text())='Avançar' or normalize-space(text())='Próxima']")
+            (By.XPATH, "//span[normalize-space(text())='Avançar' or normalize-space(text())='Próxima' or normalize-space(text())='Next']")
         ))
         safe_click(driver, btn2)
 
@@ -411,7 +411,7 @@ def enviar_formulario(
         time.sleep(2)
         preencher_input(driver, wait, 0, telefone)
         btn_enviar = wait.until(EC.element_to_be_clickable(
-            (By.XPATH, "//span[normalize-space(text())='Enviar']")
+            (By.XPATH, "//span[normalize-space(text())='Enviar' or normalize-space(text())='Submit']")
         ))
         safe_click(driver, btn_enviar)
 
