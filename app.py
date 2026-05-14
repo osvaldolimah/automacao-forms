@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import List
 from urllib.parse import urlparse
 from dotenv import load_dotenv
+import io
+import base64
 
 # Importar playwright
 from playwright.async_api import async_playwright
@@ -203,6 +205,19 @@ async def obter_rotas_disponiveis(url: str, progress_placeholder):
                     if lb:
                         outer = await lb.evaluate("el => el.outerHTML.slice(0,400)")
                         info_lines.append(f"listbox_html: {outer}")
+                    # Coletar HTML completo (limitado) e screenshot para diagnóstico visual
+                    try:
+                        page_html = await page.content()
+                        info_lines.append("page_html_snippet:")
+                        info_lines.append(page_html[:3000])
+                        try:
+                            screenshot = await page.screenshot()
+                            # Mostrar screenshot no Streamlit (aceita bytes)
+                            progress_placeholder.image(screenshot)
+                        except Exception as se:
+                            info_lines.append(f"screenshot_error: {str(se)}")
+                    except Exception as he:
+                        info_lines.append(f"html_error: {str(he)}")
                 except Exception as e:
                     info_lines.append(f"diagnostic_error: {str(e)}")
 
