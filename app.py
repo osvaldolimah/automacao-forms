@@ -169,23 +169,12 @@ def criar_driver() -> webdriver.Chrome:
     options.add_argument("--no-sandbox")               # Sem sandbox do kernel
     options.add_argument("--disable-setuid-sandbox")   # Sandbox extra desativada
     options.add_argument("--disable-dev-shm-usage")    # Usa /tmp em vez de /dev/shm
-    
-    # ── GPU / renderização ────────────────────────────────────────────────────
-    options.add_argument("--disable-gpu")
-    options.add_argument("--disable-software-rasterizer")
-    options.add_argument("--disable-accelerated-2d-canvas")
 
-    # ── Estabilidade geral ────────────────────────────────────────────────────
+    # ── GPU / renderização (desabilitar para estabilidade) ────────────────────
+    options.add_argument("--disable-gpu")
+
+    # ── Janela padrão ─────────────────────────────────────────────────────────
     options.add_argument("--window-size=1920,1080")
-    options.add_argument("--disable-extensions")
-    options.add_argument("--disable-plugins")
-    options.add_argument("--disable-sync")
-    options.add_argument("--disable-default-apps")
-    options.add_argument("--disable-hang-monitor")
-    options.add_argument("--disable-popup-blocking")
-    options.add_argument("--metrics-recording-only")
-    options.add_argument("--log-level=3")
-    options.add_argument("--disable-logging")
 
     # Tenta encontrar Chrome/Chromium instalado no sistema
     CHROME_PATHS = [
