@@ -287,10 +287,26 @@ async def enviar_formulario(url: str, rota: str, progress_placeholder, index: in
             await page.wait_for_timeout(2000)
             
             # Página 3: Telefone
-            inputs_tel = page.locator("input[type='tel'], input[type='text'], input[type='number']")
+            inputs_tel = page.locator("input[type='tel'], input[type='text'], input[type='number'], textarea, [role='textbox']")
             count_tel = await inputs_tel.count()
             if count_tel == 0:
+                # Diagnóstico: coletar amostra dos elementos de entrada disponíveis na página
+                elementos = []
+                candidatos = await page.query_selector_all("input, textarea, [role='textbox']")
+                max_sample = min(12, len(candidatos))
+                for i in range(max_sample):
+                    el = candidatos[i]
+                    info = await el.evaluate("el => ({tag: el.tagName, type: el.type || null, name: el.name || null, placeholder: el.placeholder || null, aria: el.getAttribute('aria-label'), outer: el.outerHTML ? el.outerHTML.substring(0,300) : null})")
+                    elementos.append(info)
+
+                detalhes = []
+                for idx, it in enumerate(elementos, 1):
+                    detalhes.append(f"{idx}. <{it['tag'].lower()}> type={it['type']} name={it['name']} placeholder={it['placeholder']} aria={it['aria']}\n   html={it['outer']}")
+
                 progress_placeholder.error(f"❌ [{index}/{total}] Campo de telefone nao encontrado (encontrados: {count_tel})")
+                progress_placeholder.info("🧭 Diagnóstico - primeiros elementos de input na página:")
+                for linha in detalhes:
+                    progress_placeholder.code(linha)
                 return False
             await inputs_tel.nth(0).fill(TELEFONE)
             
