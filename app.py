@@ -9,9 +9,10 @@ from typing import List
 from playwright.sync_api import sync_playwright
 from dotenv import load_dotenv
 
-# --- CONFIGURAÇÃO E DADOS (RESTAURADOS) ---
+# ==================== SEUS DADOS ORIGINAIS (RESTAURADOS) ====================
 load_dotenv()
 
+# Prioriza st.secrets (para o Cloud) mas aceita .env (local)
 NOME = st.secrets.get("NOME_FUNCIONARIO", os.getenv("NOME_FUNCIONARIO", ""))
 ID_FUNC = st.secrets.get("ID_FUNCIONARIO", os.getenv("ID_FUNCIONARIO", ""))
 TELEFONE = st.secrets.get("TELEFONE", os.getenv("TELEFONE", ""))
@@ -26,16 +27,16 @@ MEUS_BAIRROS = [
 ]
 
 BAIRROS_PREFERIDOS = [
-    "Parque Iracema", "Cajazeiras", "Cambeba", "Damas", "Itaperi",
+    "Parque Iracema", "Cajazeiras", "Cambeba", "Damas", "Itaperi", 
     "Guararapes", "Luciano Cavalcante"
 ]
 
-# --- LÓGICA DE NEGÓCIO ---
+# ==================== LÓGICA DE NEGÓCIO (RESTAURADA) ====================
 
 def remover_acentos(texto: str) -> str:
     if not texto: return ""
-    nfkd = unicodedata.normalize('NFKD', texto)
-    return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower().strip()
+    nfkd_form = unicodedata.normalize('NFKD', texto)
+    return "".join([c for c in nfkd_form if not unicodedata.combining(c)]).lower().strip()
 
 def ordenar_rotas_por_preferencia(rotas: List[str]) -> List[str]:
     rotas_preferidas = []
@@ -44,108 +45,136 @@ def ordenar_rotas_por_preferencia(rotas: List[str]) -> List[str]:
     
     for rota in rotas:
         rota_norm = remover_acentos(rota)
-        match = next((orig for norm, orig in bairros_pref_normalizados.items() if norm in rota_norm), None)
-        if match:
-            rotas_preferidas.append((BAIRROS_PREFERIDOS.index(match), rota))
-        else:
+        encontrou_preferido = False
+        for bairro_pref_norm, bairro_pref_original in bairros_pref_normalizados.items():
+            if bairro_pref_norm in rota_norm:
+                rotas_preferidas.append((BAIRROS_PREFERIDOS.index(bairro_pref_original), rota))
+                encontrou_preferido = True
+                break
+        if not encontrou_preferido:
             rotas_restantes.append(rota)
             
     rotas_preferidas.sort(key=lambda x: x[0])
-    return [r for _, r in rotas_preferidas] + rotas_restantes
+    return [rota for _, rota in rotas_preferidas] + rotas_restantes
+
+# ==================== ENGINE DE AUTOMAÇÃO (CORRIGIDA) ====================
 
 @st.cache_resource
-def setup_browser():
+def instalar_playwright():
+    """Garante que os binários do browser existam no servidor."""
     subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
 
-# --- ENGINE DE AUTOMAÇÃO ---
-
-def executar_envio(url, rota, status_placeholder):
-    setup_browser()
+def executar_fluxo_formulario(url, rota_alvo, status_placeholder):
+    instalar_playwright()
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+        # A flag --disable-dev-shm-usage resolve o TargetClosedError no Cloud
+        browser = p.chromium.launch(
+            headless=True, 
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--disable-setuid-sandbox"]
+        )
         context = browser.new_context()
         page = context.new_page()
         
         try:
-            status_placeholder.write(f"🔄 Processando: **{rota}**")
-            page.goto(url, wait_until="networkidle")
+            status_placeholder.info(f"🚚 Processando rota: {rota_alvo}")
+            page.goto(url, wait_until="networkidle", timeout=60000)
             
-            # P1: Identificação
+            # PÁGINA 1: Identificação
             inputs = page.locator("input[type='text'], input[type='number'], input[type='tel']")
             inputs.nth(0).fill(NOME)
             inputs.nth(1).fill(ID_FUNC)
-            page.get_by_role("button", name=re.compile(r"Avançar|Próxima|Next", re.IGNORECASE)).click()
             
-            # P2: Seleção de Rota
-            page.wait_for_selector("[role='listbox']", timeout=10000)
+            # Regex evita o erro de 'list has no replace'
+            btn_avancar = page.get_by_role("button", name=re.compile(r"Avançar|Próxima|Next", re.IGNORECASE))
+            btn_avancar.click()
+            
+            # PÁGINA 2: Seleção de Rota
+            page.wait_for_selector("[role='listbox']", timeout=15000)
             page.locator("[role='listbox']").click()
-            page.get_by_role("option", name=rota, exact=True).click()
-            page.get_by_role("button", name=re.compile(r"Avançar|Próxima|Next", re.IGNORECASE)).click()
             
-            # P3: Telefone
-            page.wait_for_selector("input[type='text'], input[type='tel']", timeout=5000)
+            # Clica na opção que contém o nome da rota
+            page.get_by_role("option", name=rota_alvo, exact=True).click()
+            
+            # Avançar para página de telefone
+            btn_avancar.click()
+            
+            # PÁGINA 3: Telefone e Enviar
+            page.wait_for_selector("input[type='text'], input[type='tel']", timeout=10000)
             page.locator("input[type='text'], input[type='tel']").first.fill(TELEFONE)
-            page.get_by_role("button", name=re.compile(r"Enviar|Submit", re.IGNORECASE)).click()
             
-            # Sucesso
+            btn_enviar = page.get_by_role("button", name=re.compile(r"Enviar|Submit", re.IGNORECASE))
+            btn_enviar.click()
+            
+            # Confirmação de Sucesso
             page.wait_for_selector("text=registrada", timeout=10000)
             return True
         except Exception as e:
-            st.error(f"Erro em {rota}: {str(e)}")
+            st.error(f"Erro ao enviar {rota_alvo}: {str(e)}")
             return False
         finally:
             browser.close()
 
-# --- INTERFACE STREAMLIT ---
+# ==================== INTERFACE STREAMLIT ====================
 
-st.title("🚀 Automação SPX Express")
+st.title("🚀 Automação Forms")
 
 if not all([NOME, ID_FUNC, TELEFONE]):
-    st.error("Configure os Secrets (NOME_FUNCIONARIO, ID_FUNCIONARIO, TELEFONE)")
+    st.error("Credenciais não encontradas nos Secrets ou no .env")
     st.stop()
 
-url_input = st.text_input("URL do Forms:")
+url_forms = st.text_input("Cole a URL do Forms:")
 
-if "lista_final" not in st.session_state:
-    st.session_state.lista_final = []
+if "rotas_preparadas" not in st.session_state:
+    st.session_state.rotas_preparadas = []
 
-if st.button("🔍 Mapear e Ordenar Rotas"):
-    setup_browser()
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
-        page = browser.new_page()
-        page.goto(url_input)
-        
-        # Preenche P1 para chegar nas rotas
-        inputs = page.locator("input[type='text'], input[type='number']")
-        inputs.nth(0).fill(NOME)
-        inputs.nth(1).fill(ID_FUNC)
-        page.get_by_role("button", name=re.compile(r"Avançar|Próxima", re.IGNORECASE)).click()
-        
-        # Mapeia opções
-        page.wait_for_selector("[role='listbox']")
-        page.locator("[role='listbox']").click()
-        opcoes = page.locator("[role='option']").all_inner_texts()
-        
-        bairros_limpos = [remover_acentos(b) for b in MEUS_BAIRROS]
-        encontradas = [opt for opt in opcoes if any(bl in remover_acentos(opt) for bl in bairros_limpos) and remover_acentos(opt) != "escolher"]
-        
-        st.session_state.lista_final = ordenar_rotas_por_preferencia(encontradas)
-        browser.close()
+col1, col2 = st.columns(2)
 
-if st.session_state.lista_final:
-    st.write(f"### 📋 {len(st.session_state.lista_final)} Rotas na Fila:")
-    st.info(", ".join(st.session_state.lista_final))
-    
-    if st.button("▶️ Iniciar Envio em Massa"):
-        progresso = st.progress(0)
-        status_txt = st.empty()
-        sucessos = 0
-        
-        for i, rota in enumerate(st.session_state.lista_final, 1):
-            if executar_envio(url_input, rota, status_txt):
-                sucessos += 1
-            progresso.progress(i / len(st.session_state.lista_final))
+if col1.button("🔍 Mapear Rotas"):
+    if not url_forms:
+        st.warning("Insira a URL primeiro.")
+    else:
+        instalar_playwright()
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+            page = browser.new_page()
+            page.goto(url_forms)
+            
+            # Passo 1 rápido para ler o dropdown
+            inputs = page.locator("input[type='text'], input[type='number']")
+            inputs.nth(0).fill(NOME)
+            inputs.nth(1).fill(ID_FUNC)
+            page.get_by_role("button", name=re.compile(r"Avançar|Próxima", re.IGNORECASE)).click()
+            
+            page.wait_for_selector("[role='listbox']")
+            page.locator("[role='listbox']").click()
             time.sleep(1)
             
-        st.success(f"🏁 Finalizado! {sucessos}/{len(st.session_state.lista_final)} enviadas.")
+            opcoes = page.locator("[role='option']").all_inner_texts()
+            meus_bairros_limpos = [remover_acentos(b) for b in MEUS_BAIRROS]
+            
+            encontradas = [
+                opt for opt in opcoes 
+                if any(bl in remover_acentos(opt) for bl in meus_bairros_limpos) 
+                and remover_acentos(opt) != "escolher"
+            ]
+            
+            st.session_state.rotas_preparadas = ordenar_rotas_por_preferencia(encontradas)
+            browser.close()
+
+if st.session_state.rotas_preparadas:
+    st.write(f"### 📋 {len(st.session_state.rotas_preparadas)} Rotas prontas para envio:")
+    st.info(", ".join(st.session_state.rotas_preparadas))
+    
+    if col2.button("▶️ Iniciar Envio Total", type="primary"):
+        progresso = st.progress(0)
+        status_msg = st.empty()
+        sucessos = 0
+        total = len(st.session_state.rotas_preparadas)
+        
+        for idx, rota in enumerate(st.session_state.rotas_preparadas, 1):
+            if executar_fluxo_formulario(url_forms, rota, status_msg):
+                sucessos += 1
+            progresso.progress(idx / total)
+            time.sleep(2)
+            
+        st.success(f"🏁 Concluído: {sucessos}/{total} enviadas com sucesso.")
