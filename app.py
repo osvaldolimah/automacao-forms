@@ -146,17 +146,38 @@ def criar_driver() -> webdriver.Chrome:
     Headless é sempre ativado (obrigatório em ambiente cloud/server).
     """
     options = webdriver.ChromeOptions()
+
+    # ── Modo headless ─────────────────────────────────────────────────────────
     options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
+
+    # ── Flags essenciais para ambientes container / cloud ─────────────────────
+    options.add_argument("--no-sandbox")               # Sem sandbox do kernel
+    options.add_argument("--disable-setuid-sandbox")   # Sandbox extra desativada
+    options.add_argument("--no-zygote")                # Sem processo zygote (crítico em Docker)
+    options.add_argument("--disable-dev-shm-usage")    # Usa /tmp em vez de /dev/shm (limitado no cloud)
+
+    # ── GPU / renderização ────────────────────────────────────────────────────
     options.add_argument("--disable-gpu")
+    options.add_argument("--disable-software-rasterizer")
+    options.add_argument("--disable-accelerated-2d-canvas")
+    options.add_argument("--disable-gl-drawing-for-tests")
+
+    # ── Estabilidade geral ────────────────────────────────────────────────────
     options.add_argument("--window-size=1920,1080")
     options.add_argument("--disable-extensions")
     options.add_argument("--disable-plugins")
     options.add_argument("--disable-sync")
+    options.add_argument("--disable-background-networking")
+    options.add_argument("--disable-default-apps")
+    options.add_argument("--disable-hang-monitor")
+    options.add_argument("--disable-popup-blocking")
+    options.add_argument("--disable-translate")
+    options.add_argument("--metrics-recording-only")
+    options.add_argument("--safebrowsing-disable-auto-update")
     options.add_argument("--log-level=3")
     options.add_argument("--disable-logging")
     options.add_argument("--remote-debugging-port=0")
+    options.add_argument("--single-process")           # Um único processo (mais estável em cloud)
 
     # Caminhos conhecidos de binário do Chromium por distro
     CHROME_BINARIES = [
