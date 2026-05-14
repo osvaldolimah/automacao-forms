@@ -1,181 +1,76 @@
 import streamlit as st
 import os
-import time
-import unicodedata
-from typing import List
+import subprocess
+import sys
+import re
+from playwright.sync_api import sync_playwright
 from dotenv import load_dotenv
 
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
-from webdriver_manager.chrome import ChromeDriverManager
-
-# ==================== CONFIGS E ESTADO ====================
-st.set_page_config(page_title="SPX Route Automator", page_icon="🚚")
-
+# Carregar variáveis de ambiente (Secrets no Streamlit Cloud)
 load_dotenv()
-NOME = os.getenv("NOME_FUNCIONARIO", "").strip()
-ID_FUNC = os.getenv("ID_FUNCIONARIO", "").strip()
-TELEFONE = os.getenv("TELEFONE", "").strip()
-
-# Inicialização do Session State
-if "rotas_disponiveis" not in st.session_state:
-    st.session_state.rotas_disponiveis = []
-if "log_execucao" not in st.session_state:
-    st.session_state.log_execucao = []
-
-# Bairros (Mantidos do seu core original)
-MEUS_BAIRROS = ["Cambeba", "Guararapes", "Benfica", "Itaperi", "Rodolfo Teófilo", "Cajazeiras", "Aerolândia", "Alto da Balança", "Boa Vista", "Luciano Cavalcante", "Dias Macedo", "Damas", "Montese", "Jardim América", "Parreão", "Fátima", "Serrinha", "Cidade dos Funcionários", "Parque Iracema", "Parque Manibura", "Parquelandia", "Amadeu Furtado", "São Gerardo", "Bom Futuro", "Vila União"]
-BAIRROS_PREFERIDOS = ["Parque Iracema", "Cajazeiras", "Cambeba", "Damas", "Itaperi", "Guararapes", "Luciano Cavalcante"]
-
-# ==================== UTILITÁRIOS ====================
-
-def remover_acentos(texto: str) -> str:
-    if not texto: return ""
-    return "".join([c for c in unicodedata.normalize('NFKD', texto) if not unicodedata.combining(c)]).lower().strip()
-
-def ordenar_preferencia(rotas: List[str]) -> List[str]:
-    pref_norm = {remover_acentos(b): b for b in BAIRROS_PREFERIDOS}
-    rotas_pref = []
-    rotas_rest = []
-    
-    for r in rotas:
-        r_norm = remover_acentos(r)
-        match = next((b for b_norm, b in pref_norm.items() if b_norm in r_norm), None)
-        if match:
-            rotas_pref.append((BAIRROS_PREFERIDOS.index(match), r))
-        else:
-            rotas_rest.append(r)
-    
-    rotas_pref.sort(key=lambda x: x[0])
-    return [r for _, r in rotas_pref] + rotas_rest
+NOME = st.secrets.get("NOME_FUNCIONARIO", os.getenv("NOME_FUNCIONARIO", ""))
+ID_FUNC = st.secrets.get("ID_FUNCIONARIO", os.getenv("ID_FUNCIONARIO", ""))
+TELEFONE = st.secrets.get("TELEFONE", os.getenv("TELEFONE", ""))
 
 @st.cache_resource
-def get_driver_path():
-    """Instala o driver uma única vez e cacheia o caminho."""
-    return ChromeDriverManager().install()
+def instalar_browser():
+    """Instala o binário do Chromium sem depender do apt-get do sistema."""
+    subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
 
-def criar_driver():
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
-    # Evita detecção básica de bot
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
-    
-    return webdriver.Chrome(service=Service(get_driver_path()), options=options)
-
-def preencher_e_avancar(driver, wait, inputs_data: list, is_final=False):
-    """Lógica genérica para preencher inputs por índice e clicar no botão de ação."""
-    inputs = wait.until(EC.presence_of_all_elements_located((By.XPATH, "//input[@type='text' or @type='number' or @type='tel']")))
-    for idx, texto in inputs_data:
-        campo = inputs[idx]
-        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", campo)
-        campo.clear()
-        campo.send_keys(texto)
-    
-    btn_text = "Enviar" if is_final else "Avançar"
-    btn_xpath = f"//span[normalize-space(text())='{btn_text}' or normalize-space(text())='Próxima']"
-    btn = wait.until(EC.element_to_be_clickable((By.XPATH, btn_xpath)))
-    driver.execute_script("arguments[0].click();", btn)
-
-# ==================== UI ====================
-
-st.title("🚚 Automação SPX Express")
-st.caption("Mapeamento e envio em massa para formulários Google")
-
-url_forms = st.text_input("URL do Formulário:", placeholder="https://docs.google.com/forms/...")
-
-col1, col2 = st.columns(2)
-
-# --- AÇÃO 1: MAPEAMENTO ---
-if col1.button("🔍 1. Mapear Rotas", use_container_width=True):
-    if not url_forms:
-        st.error("Insira a URL.")
-    else:
-        with st.status("Vasculhando rotas...", expanded=True) as status:
-            driver = criar_driver()
-            try:
-                wait = WebDriverWait(driver, 15)
-                driver.get(url_forms)
-                
-                # Pag 1: Identificação
-                preencher_e_avancar(driver, wait, [(0, NOME), (1, ID_FUNC)])
-                
-                # Pag 2: Dropdown
-                time.sleep(1.5)
-                dropdown = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[@role='listbox']")))
-                driver.execute_script("arguments[0].click();", dropdown)
-                
-                time.sleep(1)
-                opcoes = driver.find_elements(By.XPATH, "//div[@role='option']")
-                bairros_limpos = [remover_acentos(b) for b in MEUS_BAIRROS]
-                
-                encontradas = []
-                for opt in opcoes:
-                    val = opt.get_attribute("data-value") or opt.text
-                    if val and val != "Escolher":
-                        if any(bl in remover_acentos(val) for bl in bairros_limpos):
-                            encontradas.append(val)
-                
-                st.session_state.rotas_disponiveis = ordenar_preferencia(encontradas)
-                status.update(label=f"Mapeamento concluído: {len(encontradas)} rotas.", state="complete")
-            except Exception as e:
-                st.error(f"Erro no mapeamento: {e}")
-            finally:
-                driver.quit()
-
-# --- AÇÃO 2: EXECUÇÃO ---
-if st.session_state.rotas_disponiveis:
-    st.write("### 📍 Rotas Detectadas")
-    st.info(", ".join(st.session_state.rotas_disponiveis))
-    
-    if col2.button("🚀 2. Iniciar Envios", type="primary", use_container_width=True):
-        progress = st.progress(0)
-        total = len(st.session_state.rotas_disponiveis)
+def executar_automacao(url, rota):
+    instalar_browser()
+    with sync_playwright() as p:
+        # Lançamento do browser com argumentos para ambiente Cloud
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-gpu"])
+        page = browser.new_page()
         
-        for i, rota in enumerate(st.session_state.rotas_disponiveis, 1):
-            with st.spinner(f"Processando {rota}..."):
-                driver = criar_driver()
-                try:
-                    wait = WebDriverWait(driver, 20)
-                    driver.get(url_forms)
-                    
-                    # P1
-                    preencher_e_avancar(driver, wait, [(0, NOME), (1, ID_FUNC)])
-                    
-                    # P2: Seleção Rota
-                    time.sleep(1.2)
-                    dropdown = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[@role='listbox']")))
-                    driver.execute_script("arguments[0].click();", dropdown)
-                    time.sleep(0.8)
-                    
-                    opt_xpath = f"//div[@role='option']//span[text()='{rota}']"
-                    option_el = wait.until(EC.element_to_be_clickable((By.XPATH, opt_xpath)))
-                    driver.execute_script("arguments[0].click();", option_el)
-                    
-                    time.sleep(0.5)
-                    btn_next = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[normalize-space(text())='Avançar' or normalize-space(text())='Próxima']")))
-                    driver.execute_script("arguments[0].click();", btn_next)
-                    
-                    # P3: Telefone e Envio
-                    time.sleep(1.2)
-                    preencher_e_avancar(driver, wait, [(0, TELEFONE)], is_final=True)
-                    
-                    # Confirmação
-                    wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'registrada') or contains(text(), 'agradecemos')]")))
-                    st.toast(f"Sucesso: {rota}")
-                except Exception as e:
-                    st.error(f"Falha na rota {rota}: {e}")
-                finally:
-                    driver.quit()
+        try:
+            page.goto(url, wait_until="networkidle")
             
-            progress.progress(i / total)
-            time.sleep(1) # Delay humano entre sessões
+            # Passo 1: Identificação (usando seletores genéricos robustos)
+            inputs = page.locator("input[type='text'], input[type='number'], input[type='tel']")
+            inputs.nth(0).fill(NOME)
+            inputs.nth(1).fill(ID_FUNC)
+            
+            # Clique no botão (Regex resolve o erro da lista que deu no log)
+            page.get_by_role("button", name=re.compile(r"Avançar|Próxima|Next", re.IGNORECASE)).click()
+            
+            # Passo 2: Seleção da Rota
+            page.wait_for_selector("[role='listbox']", timeout=10000)
+            page.locator("[role='listbox']").click()
+            
+            # Seleciona a rota exata
+            page.get_by_role("option", name=rota, exact=True).click()
+            
+            # Avança novamente
+            page.get_by_role("button", name=re.compile(r"Avançar|Próxima|Next", re.IGNORECASE)).click()
+            
+            # Passo 3: Telefone e Envio
+            page.wait_for_selector("input[type='text'], input[type='tel']", timeout=5000)
+            page.locator("input[type='text'], input[type='tel']").first.fill(TELEFONE)
+            
+            page.get_by_role("button", name=re.compile(r"Enviar|Submit", re.IGNORECASE)).click()
+            
+            # Validação de sucesso
+            page.wait_for_selector("text=registrada", timeout=10000)
+            return True
+        except Exception as e:
+            st.error(f"Erro na rota {rota}: {str(e)}")
+            return False
+        finally:
+            browser.close()
 
-        st.success("✅ Processo finalizado!")
+# --- Interface ---
+st.title("🚀 Automação SPX")
+
+url = st.text_input("URL do Forms:")
+rota_teste = "Cambeba" # Exemplo, você pode carregar sua lista aqui
+
+if st.button("Executar"):
+    if not url:
+        st.error("Insira a URL")
+    else:
+        with st.spinner(f"Enviando para {rota_teste}..."):
+            sucesso = executar_automacao(url, rota_teste)
+            if sucesso:
+                st.success("Enviado com sucesso!")
