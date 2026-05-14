@@ -114,13 +114,28 @@ def safe_click(driver: webdriver.Chrome, element) -> None:
 
 
 def preencher_input(driver, wait, index: int, texto: str) -> None:
+    """
+    Localiza o input pelo índice e preenche via JavaScript.
+    Evita o mecanismo de send_keys (instável em containers headless).
+    """
     inputs = wait.until(EC.presence_of_all_elements_located(
         (By.XPATH, "//input[@type='text' or @type='number']")
     ))
     campo = inputs[index]
-    safe_click(driver, campo)
-    campo.clear()
-    campo.send_keys(texto)
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", campo)
+    time.sleep(0.2)
+    # Foca o elemento
+    driver.execute_script("arguments[0].focus();", campo)
+    # Limpa e define valor via JS
+    driver.execute_script("arguments[0].value = '';", campo)
+    driver.execute_script("arguments[0].value = arguments[1];", campo, texto)
+    # Dispara eventos para o Google Forms reconhecer a mudança
+    driver.execute_script("""
+        var el = arguments[0];
+        ['input', 'change', 'blur'].forEach(function(evtName) {
+            el.dispatchEvent(new Event(evtName, { bubbles: true }));
+        });
+    """, campo)
 
 
 def ordenar_rotas_por_preferencia(rotas: List[str], bairros_preferidos: List[str]) -> List[str]:
@@ -177,7 +192,7 @@ def criar_driver() -> webdriver.Chrome:
     options.add_argument("--log-level=3")
     options.add_argument("--disable-logging")
     options.add_argument("--remote-debugging-port=0")
-    options.add_argument("--single-process")           # Um único processo (mais estável em cloud)
+    options.add_argument("--disable-ipc-flooding-protection")
 
     # Caminhos conhecidos de binário do Chromium por distro
     CHROME_BINARIES = [
