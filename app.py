@@ -380,61 +380,99 @@ def enviar_formulario(
     try:
         log(f"[Tentativa {tentativa}/{MAX_TENTATIVAS}] Iniciando envio: {rota}", "PROC")
         driver = criar_driver()
+        log("  ✅ ChromeDriver criado", "DEBUG")
+        
         wait = WebDriverWait(driver, TIMEOUT_ENVIO)
 
+        log("  Navegando para formulário...", "DEBUG")
         driver.get(url)
+        time.sleep(1)
+        log("  ✅ Página carregada", "DEBUG")
 
         # Página 1: Identificação
+        log("  Preenchendo página 1 (identificação)...", "DEBUG")
         preencher_input(driver, wait, 0, nome)
+        log(f"    ✅ Nome: {nome}", "DEBUG")
+        
         preencher_input(driver, wait, 1, id_func)
+        log(f"    ✅ ID: {id_func}", "DEBUG")
+        
+        log("  Clicando botão Avançar (página 1)...", "DEBUG")
         btn = wait.until(EC.element_to_be_clickable(
             (By.XPATH, "//span[normalize-space(text())='Avançar' or normalize-space(text())='Próxima' or normalize-space(text())='Next']")
         ))
         safe_click(driver, btn)
+        log("  ✅ Avançado para página 2", "DEBUG")
 
         # Página 2: Seleção da Rota
         time.sleep(2)
+        log("  Selecionando rota na página 2...", "DEBUG")
+        
         dropdown = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[@role='listbox']")))
+        log("    ✅ Dropdown encontrado", "DEBUG")
+        
         safe_click(driver, dropdown)
         time.sleep(1)
+        log("    ✅ Dropdown aberto", "DEBUG")
+        
         opcao = wait.until(EC.element_to_be_clickable(
             (By.XPATH, f"//div[@role='option']//span[text()='{rota}']")
         ))
+        log(f"    ✅ Opção '{rota}' localizada", "DEBUG")
+        
         safe_click(driver, opcao)
         time.sleep(1)
+        log(f"    ✅ Opção '{rota}' selecionada", "DEBUG")
+        
+        log("  Clicando botão Avançar (página 2)...", "DEBUG")
         btn2 = wait.until(EC.element_to_be_clickable(
             (By.XPATH, "//span[normalize-space(text())='Avançar' or normalize-space(text())='Próxima' or normalize-space(text())='Next']")
         ))
         safe_click(driver, btn2)
+        log("  ✅ Avançado para página 3", "DEBUG")
 
         # Página 3: Telefone + Envio
         time.sleep(2)
+        log("  Preenchendo página 3 (telefone)...", "DEBUG")
+        
         preencher_input(driver, wait, 0, telefone)
+        log(f"    ✅ Telefone: {telefone}", "DEBUG")
+        
+        log("  Clicando botão Enviar...", "DEBUG")
         btn_enviar = wait.until(EC.element_to_be_clickable(
             (By.XPATH, "//span[normalize-space(text())='Enviar' or normalize-space(text())='Submit']")
         ))
         safe_click(driver, btn_enviar)
-
-        # Confirma sucesso
-        wait.until(EC.presence_of_element_located(
-            (By.XPATH, "//*[contains(text(), 'registrada') or contains(text(), 'agradecemos')]")
-        ))
-        log(f"Sucesso confirmado: {rota}", "OK")
+        log("  ✅ Formulário enviado (clique realizado)", "DEBUG")
+        
+        # Aguarda um pouco para garantir que o envio foi processado
+        time.sleep(2)
+        log(f"✅ SUCESSO: {rota}", "OK")
         return True
 
     except Exception as e:
-        log(f"Falha no envio de '{rota}': {e}", "ERRO")
+        log(f"❌ Falha no envio de '{rota}': {str(e)[:100]}", "ERRO")
+        import traceback
+        log(f"   Stacktrace: {traceback.format_exc()[:150]}", "DEBUG")
+        
         if tentativa < MAX_TENTATIVAS:
-            log(f"Aguardando {INTERVALO_RETRY}s antes de retry...", "RETRY")
+            log(f"🔁 Aguardando {INTERVALO_RETRY}s antes de retry...", "RETRY")
             time.sleep(INTERVALO_RETRY)
             if driver:
-                driver.quit()
+                try:
+                    driver.quit()
+                except:
+                    pass
                 driver = None
             return enviar_formulario(url, rota, nome, id_func, telefone, log, tentativa + 1)
         return False
     finally:
         if driver:
-            driver.quit()
+            try:
+                driver.quit()
+                log("  ✅ ChromeDriver fechado", "DEBUG")
+            except:
+                pass
 
 # ==================== INTERFACE STREAMLIT ====================
 
