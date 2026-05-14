@@ -274,15 +274,51 @@ def obter_rotas_disponiveis(
         time.sleep(1)
         log("Procurando botão 'Avançar'...", "MAP")
         
+        # Múltiplos XPaths para localizar o botão
+        xpath_variants = [
+            "//span[normalize-space(text())='Avançar' or normalize-space(text())='Próxima']",
+            "//button//span[contains(text(), 'Avançar')] | //button//span[contains(text(), 'Próxima')]",
+            "//span[contains(text(), 'Avançar')] | //span[contains(text(), 'Próxima')]",
+            "//*[normalize-space(text())='Avançar'] | //*[normalize-space(text())='Próxima']"
+        ]
+        
+        btn = None
+        for idx, xpath in enumerate(xpath_variants):
+            try:
+                log(f"  Tentando XPath {idx+1}/{len(xpath_variants)}...", "DEBUG")
+                elements = driver.find_elements(By.XPATH, xpath)
+                if elements:
+                    log(f"  ✅ Encontrou {len(elements)} elemento(s) com XPath {idx+1}", "DEBUG")
+                    btn = elements[0]
+                    break
+                else:
+                    log(f"  ❌ XPath {idx+1} retornou 0 elementos", "DEBUG")
+            except Exception as ex:
+                log(f"  ⚠️ XPath {idx+1} error: {str(ex)[:60]}", "DEBUG")
+                continue
+        
+        if not btn:
+            # Debugging: listar todos os spans na página
+            all_spans = driver.find_elements(By.TAG_NAME, "span")
+            log(f"⚠️ Botão não encontrado. Existem {len(all_spans)} spans na página.", "DEBUG")
+            for i, span in enumerate(all_spans[:5]):
+                try:
+                    text = span.text.strip()
+                    if text:
+                        log(f"  Span {i}: '{text[:40]}'", "DEBUG")
+                except:
+                    pass
+            raise Exception("Botão 'Avançar' não localizado em nenhum XPath")
+        
         try:
-            btn = wait.until(EC.element_to_be_clickable(
-                (By.XPATH, "//span[normalize-space(text())='Avançar' or normalize-space(text())='Próxima']")
-            ))
             log("✅ Botão 'Avançar' localizado", "MAP")
+            # Scroll até o botão
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", btn)
+            time.sleep(0.5)
             safe_click(driver, btn)
             log("✅ Avançou para página 2 (seleção de rota)", "MAP")
         except Exception as e:
-            log(f"⚠️ Erro ao encontrar/clicar 'Avançar': {str(e)[:80]}", "AVISO")
+            log(f"⚠️ Erro ao clicar no botão: {str(e)[:80]}", "AVISO")
             raise
 
         time.sleep(2)
