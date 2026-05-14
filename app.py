@@ -277,7 +277,30 @@ async def enviar_formulario(url: str, rota: str, progress_placeholder, index: in
                         break
             if opcao:
                 await opcao.scroll_into_view_if_needed()
-                await opcao.click()
+                # Tentar clicar a opção de formas diferentes para maior robustez
+                clicked = False
+                try:
+                    await opcao.click()
+                    clicked = True
+                except Exception:
+                    pass
+
+                if not clicked:
+                    try:
+                        filho = await opcao.query_selector("span")
+                        if filho:
+                            await filho.click()
+                            clicked = True
+                    except Exception:
+                        pass
+
+                if not clicked:
+                    try:
+                        # fallback: executar click via JS
+                        await opcao.evaluate("el => el.click()")
+                        clicked = True
+                    except Exception:
+                        pass
             await page.wait_for_timeout(1000)
             
             # Avançar
@@ -286,9 +309,17 @@ async def enviar_formulario(url: str, rota: str, progress_placeholder, index: in
                 await avancar_btn2.click()
             await page.wait_for_timeout(2000)
             
-            # Página 3: Telefone
-            inputs_tel = page.locator("input[type='tel'], input[type='text'], input[type='number'], textarea, [role='textbox']")
+            # Página 3: Telefone - esperar por vários possíveis seletores
+            phone_selectors = "input[type='tel'], input[aria-label*='fone'], input[aria-label*='telefone'], input[placeholder*='fone'], input[placeholder*='telefone'], [role='textbox'], textarea"
+            inputs_tel = page.locator(phone_selectors)
             count_tel = await inputs_tel.count()
+            # tentar aguardar ativamente por até 8s
+            waited = 0
+            while count_tel == 0 and waited < 8:
+                await page.wait_for_timeout(500)
+                waited += 0.5
+                count_tel = await inputs_tel.count()
+
             if count_tel == 0:
                 # Diagnóstico: coletar amostra dos elementos de entrada disponíveis na página
                 elementos = []
