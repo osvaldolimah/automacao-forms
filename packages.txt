@@ -23,3 +23,5 @@ libpango-1.0-0
 libcairo2
 libfontconfig1
 libfreetype6
+chromium
+chromium-driver
