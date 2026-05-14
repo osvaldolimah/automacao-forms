@@ -123,34 +123,31 @@ def _playwright_launch_args() -> dict:
 
 
 async def ir_para_pagina_rotas(page) -> bool:
-    """Avança para a página de rotas com fallback de seletores e idioma."""
-    if await page.locator("[role='listbox'], select").count() > 0:
+    """Avança para a página de rotas com fallback de seletores."""
+    # Verificar se já está na página de rotas
+    if await page.locator("[role='listbox']").count() > 0:
         return True
 
-    seletores_avancar = [
-        "xpath=(//span[normalize-space()='Avançar' or normalize-space()='Próxima' or normalize-space()='Next']/ancestor::*[@role='button'][1])[1]",
-        "xpath=(//div[@role='button'][.//span[normalize-space()='Avançar' or normalize-space()='Próxima' or normalize-space()='Next']])[1]",
-        "xpath=(//*[@role='button' and (@aria-label='Avançar' or @aria-label='Próxima' or @aria-label='Next')])[1]",
-    ]
+    # Tentar clicar em botão de avanço (com XPath simples e direto)
+    try:
+        btn_avancar = await page.query_selector("//span[contains(text(), 'Avançar') or contains(text(), 'Próxima') or contains(text(), 'Next')]/ancestor::button[1]")
+        if btn_avancar:
+            await btn_avancar.click(timeout=5000)
+    except:
+        # Se não achou por XPath, tentar via evaluate
+        await page.evaluate("""() => {
+            const btn = Array.from(document.querySelectorAll('button')).find(b => 
+                b.textContent.includes('Avançar') || b.textContent.includes('Próxima') || b.textContent.includes('Next')
+            );
+            if (btn) btn.click();
+        }""")
 
-    clicou = False
-    for seletor in seletores_avancar:
-        alvo = page.locator(seletor)
-        if await alvo.count() > 0:
-            try:
-                await alvo.first.click(timeout=5000)
-                clicou = True
-                break
-            except Exception:
-                continue
-
-    if not clicou:
-        return False
-
+    # Aguardar a página de rotas carregar (max 15s)
     for _ in range(30):
-        if await page.locator("[role='listbox'], select").count() > 0:
+        if await page.locator("[role='listbox']").count() > 0:
+            await page.wait_for_timeout(1000)
             return True
-        await page.wait_for_timeout(1000)
+        await page.wait_for_timeout(500)
 
     return False
 
@@ -257,51 +254,34 @@ async def enviar_formulario(url: str, rota: str, progress_placeholder, index: in
                 await page.wait_for_timeout(1000)
             await page.wait_for_selector("//*[@role='option'] | //select/option", timeout=10000)
             
-            opcao = None
-            opcoes = await page.query_selector_all("//*[@role='listbox']//*[@role='option'] | //*[@role='option'] | //select/option")
+            # Encontrar e clicar na rota pelo texto (role='option' dentro de listbox)
             rota_limpa = remover_acentos(rota)
+            opcoes = await page.query_selector_all("[role='option']")
+            opcao_encontrada = None
+            
             for op in opcoes:
-                texto_attr = await op.get_attribute("data-value")
                 texto_inner = await op.inner_text()
-                texto_opcao = normalizar_texto(texto_attr or texto_inner)
-                if remover_acentos(texto_opcao) == rota_limpa:
-                    opcao = op
+                if texto_inner and remover_acentos(texto_inner.strip()) == rota_limpa:
+                    opcao_encontrada = op
                     break
-            if not opcao:
-                for op in opcoes:
-                    texto_attr = await op.get_attribute("data-value")
-                    texto_inner = await op.inner_text()
-                    texto_opcao = normalizar_texto(texto_attr or texto_inner)
-                    if rota_limpa in remover_acentos(texto_opcao):
-                        opcao = op
-                        break
-            if opcao:
-                await opcao.scroll_into_view_if_needed()
-                # Tentar clicar a opção de formas diferentes para maior robustez
-                clicked = False
+            
+            if not opcao_encontrada:
+                progress_placeholder.warning(f"⚠️ [{index}/{total}] Rota '{rota}' não localizada nas opções disponíveis")
+                return False
+            
+            # Clicar na opção encontrada via JS para evitar interceptação de eventos
+            try:
+                await opcao_encontrada.evaluate("el => el.click()")
+            except:
+                # fallback: usar scroll + click normal
+                await opcao_encontrada.scroll_into_view_if_needed()
                 try:
-                    await opcao.click()
-                    clicked = True
-                except Exception:
-                    pass
-
-                if not clicked:
-                    try:
-                        filho = await opcao.query_selector("span")
-                        if filho:
-                            await filho.click()
-                            clicked = True
-                    except Exception:
-                        pass
-
-                if not clicked:
-                    try:
-                        # fallback: executar click via JS
-                        await opcao.evaluate("el => el.click()")
-                        clicked = True
-                    except Exception:
-                        pass
-            await page.wait_for_timeout(1000)
+                    await opcao_encontrada.click(timeout=5000)
+                except:
+                    progress_placeholder.warning(f"⚠️ [{index}/{total}] Não foi possível clicar na rota '{rota}'")
+                    return False
+            
+            await page.wait_for_timeout(1500)
             
             # Avançar
             avancar_btn2 = await page.query_selector("//span[normalize-space(text())='Avançar' or normalize-space(text())='Próxima']")
@@ -309,37 +289,14 @@ async def enviar_formulario(url: str, rota: str, progress_placeholder, index: in
                 await avancar_btn2.click()
             await page.wait_for_timeout(2000)
             
-            # Página 3: Telefone - esperar por vários possíveis seletores
-            phone_selectors = "input[type='tel'], input[aria-label*='fone'], input[aria-label*='telefone'], input[placeholder*='fone'], input[placeholder*='telefone'], [role='textbox'], textarea"
-            inputs_tel = page.locator(phone_selectors)
-            count_tel = await inputs_tel.count()
-            # tentar aguardar ativamente por até 8s
-            waited = 0
-            while count_tel == 0 and waited < 8:
-                await page.wait_for_timeout(500)
-                waited += 0.5
-                count_tel = await inputs_tel.count()
-
-            if count_tel == 0:
-                # Diagnóstico: coletar amostra dos elementos de entrada disponíveis na página
-                elementos = []
-                candidatos = await page.query_selector_all("input, textarea, [role='textbox']")
-                max_sample = min(12, len(candidatos))
-                for i in range(max_sample):
-                    el = candidatos[i]
-                    info = await el.evaluate("el => ({tag: el.tagName, type: el.type || null, name: el.name || null, placeholder: el.placeholder || null, aria: el.getAttribute('aria-label'), outer: el.outerHTML ? el.outerHTML.substring(0,300) : null})")
-                    elementos.append(info)
-
-                detalhes = []
-                for idx, it in enumerate(elementos, 1):
-                    detalhes.append(f"{idx}. <{it['tag'].lower()}> type={it['type']} name={it['name']} placeholder={it['placeholder']} aria={it['aria']}\n   html={it['outer']}")
-
-                progress_placeholder.error(f"❌ [{index}/{total}] Campo de telefone nao encontrado (encontrados: {count_tel})")
-                progress_placeholder.info("🧭 Diagnóstico - primeiros elementos de input na página:")
-                for linha in detalhes:
-                    progress_placeholder.code(linha)
+            # Página 3: Telefone
+            # Usar aria-label específico que aparece no formulário: "Número de telefone com DDD"
+            phone_input = page.locator("[aria-label*='elefone']").first
+            try:
+                await phone_input.fill(TELEFONE, timeout=5000)
+            except:
+                progress_placeholder.error(f"❌ [{index}/{total}] Campo de telefone não encontrado")
                 return False
-            await inputs_tel.nth(0).fill(TELEFONE)
             
             # Enviar
             enviar_btn = await page.query_selector("//span[normalize-space(text())='Enviar']")
