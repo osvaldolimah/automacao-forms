@@ -175,6 +175,14 @@ def criar_driver() -> webdriver.Chrome:
 
     # ── Janela padrão ─────────────────────────────────────────────────────────
     options.add_argument("--window-size=1920,1080")
+    
+    # ── Estabilidade em container / headless ──────────────────────────────────
+    options.add_argument("--disable-blink-features=AutomationControlled")  # Evita detecção
+    options.add_argument("--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    options.add_argument("--no-first-run")              # Skip first-run tasks
+    options.add_argument("--no-default-browser-check")  # Skip browser check
+    options.add_argument("--disable-browser-side-navigation")
+    options.add_argument("--disable-client-side-phishing-detection")
 
     # Tenta encontrar Chrome/Chromium instalado no sistema
     CHROME_PATHS = [
@@ -236,47 +244,96 @@ def obter_rotas_disponiveis(
     try:
         log("Iniciando ChromeDriver para mapeamento...", "MAP")
         driver = criar_driver()
+        log("✅ ChromeDriver iniciado", "MAP")
+        
         wait = WebDriverWait(driver, TIMEOUT_PADRAO)
         rotas_encontradas = []
         bairros_limpos = [remover_acentos(b) for b in meus_bairros]
 
+        log(f"Navegando para: {url[:50]}...", "MAP")
         driver.get(url)
-        log("Página carregada. Preenchendo identificação...", "MAP")
-
-        preencher_input(driver, wait, 0, nome)
-        preencher_input(driver, wait, 1, id_func)
-
-        btn = wait.until(EC.element_to_be_clickable(
-            (By.XPATH, "//span[normalize-space(text())='Avançar' or normalize-space(text())='Próxima']")
-        ))
-        safe_click(driver, btn)
-        log("Avançou para página 2 (seleção de rota).", "MAP")
+        log("✅ Página carregada", "MAP")
+        
+        time.sleep(1)
+        log("Aguardando inputs de identificação...", "MAP")
+        
+        try:
+            preencher_input(driver, wait, 0, nome)
+            log(f"✅ Nome preenchido: {nome}", "MAP")
+        except Exception as e:
+            log(f"⚠️ Erro ao preencher nome: {str(e)[:80]}", "AVISO")
+            raise
+        
+        try:
+            preencher_input(driver, wait, 1, id_func)
+            log(f"✅ ID preenchido: {id_func}", "MAP")
+        except Exception as e:
+            log(f"⚠️ Erro ao preencher ID: {str(e)[:80]}", "AVISO")
+            raise
+        
+        time.sleep(1)
+        log("Procurando botão 'Avançar'...", "MAP")
+        
+        try:
+            btn = wait.until(EC.element_to_be_clickable(
+                (By.XPATH, "//span[normalize-space(text())='Avançar' or normalize-space(text())='Próxima']")
+            ))
+            log("✅ Botão 'Avançar' localizado", "MAP")
+            safe_click(driver, btn)
+            log("✅ Avançou para página 2 (seleção de rota)", "MAP")
+        except Exception as e:
+            log(f"⚠️ Erro ao encontrar/clicar 'Avançar': {str(e)[:80]}", "AVISO")
+            raise
 
         time.sleep(2)
-        dropdown = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[@role='listbox']")))
-        safe_click(driver, dropdown)
+        log("Aguardando dropdown de rotas...", "MAP")
+        
+        try:
+            dropdown = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[@role='listbox']")))
+            log("✅ Dropdown localizado", "MAP")
+            safe_click(driver, dropdown)
+            log("✅ Dropdown clicado", "MAP")
+        except Exception as e:
+            log(f"⚠️ Erro com dropdown: {str(e)[:80]}", "AVISO")
+            raise
+            
         time.sleep(2)
+        log("Extraindo opções do dropdown...", "MAP")
+        
+        try:
+            opcoes = driver.find_elements(By.XPATH, "//div[@role='option']")
+            log(f"✅ Total de opções encontradas: {len(opcoes)}", "MAP")
+        except Exception as e:
+            log(f"⚠️ Erro ao extrair opções: {str(e)[:80]}", "AVISO")
+            raise
 
-        opcoes = driver.find_elements(By.XPATH, "//div[@role='option']")
-        log(f"Total de opções no dropdown: {len(opcoes)}", "MAP")
+        for idx, opt in enumerate(opcoes):
+            try:
+                texto_original = opt.get_attribute("data-value") or opt.text
+                if texto_original and texto_original != "Escolher":
+                    texto_limpo = remover_acentos(texto_original)
+                    if any(b in texto_limpo for b in bairros_limpos):
+                        rotas_encontradas.append(texto_original)
+                        log(f"✅ Rota {len(rotas_encontradas)}: {texto_original}", "OK")
+            except Exception as e:
+                log(f"⚠️ Erro ao processar opção {idx}: {str(e)[:60]}", "AVISO")
+                continue
 
-        for opt in opcoes:
-            texto_original = opt.get_attribute("data-value") or opt.text
-            if texto_original and texto_original != "Escolher":
-                texto_limpo = remover_acentos(texto_original)
-                if any(b in texto_limpo for b in bairros_limpos):
-                    rotas_encontradas.append(texto_original)
-                    log(f"Rota encontrada: {texto_original}", "OK")
-
-        log(f"Mapeamento concluído — {len(rotas_encontradas)} rota(s) compatível(is).", "INFO")
+        log(f"Mapeamento concluído — {len(rotas_encontradas)} rota(s) compatível(is)", "INFO")
         return rotas_encontradas
 
     except Exception as e:
-        log(f"Erro no mapeamento: {e}", "ERRO")
+        log(f"❌ Erro no mapeamento: {str(e)[:120]}", "ERRO")
+        import traceback
+        log(f"Stacktrace: {traceback.format_exc()[:200]}", "DEBUG")
         return []
     finally:
         if driver:
-            driver.quit()
+            try:
+                driver.quit()
+                log("✅ ChromeDriver fechado", "DEBUG")
+            except:
+                pass
 
 
 def enviar_formulario(
