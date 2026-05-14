@@ -1,14 +1,16 @@
-# ⚡ Guia Rápido - Corrigir Error do Streamlit Cloud
+# ⚡ Guia Rápido - Corrigir Erro do Streamlit Cloud
 
 ## 🎯 O Problema
-O deployment falhou com erro de pacotes não encontrados.
+Erro: `E: Unable to locate package libgconf-2-4`
+
+O `packages.txt` tem pacotes que não existem em versões modernas do Debian.
 
 ## ✅ A Solução (3 passos)
 
 ### 1️⃣ Fazer Commit
 ```bash
-git add .
-git commit -m "Fix: Simplificar packages.txt para Streamlit Cloud"
+git add packages.txt
+git commit -m "Fix: Remover pacotes obsoletos do packages.txt"
 git push origin main
 ```
 
@@ -26,37 +28,17 @@ git push origin main
 
 ## 📝 O Que Mudou
 
-**`packages.txt`** (agora 6 linhas apenas):
+**`packages.txt`** (agora apenas 3 pacotes essenciais):
 ```
 chromium
 chromium-driver
-xvfb
-libxi6
-libgconf-2-4
 fonts-liberation
 ```
 
-**`app.py`** (melhorado para auto-detectar Chrome):
-- ✅ Agora funciona com Streamlit Cloud
-- ✅ Mantém compatibilidade local
-
----
-
-## ❓ Se não funcionar
-
-### A. Verificar packages.txt
-```bash
-# Deve ter EXATAMENTE essas 6 linhas
-cat packages.txt
-```
-
-### B. Forçar redeploy
-1. Clique em "Reboot" nas configurações
-2. Depois clique em "Redeploy"
-
-### C. Verificar logs
-- Clique em "Logs" durante deployment
-- Procure por "chromium" ou erros
+**Por quê?**
+- Outros pacotes não existem/são obsoletos no Debian atual
+- Estes 3 são os únicos necessários e disponíveis
+- Chromium já traz suas dependências
 
 ---
 
@@ -66,9 +48,35 @@ cat packages.txt
 python diagnostico.py
 ```
 
-Se mostrar ✅ verde, está OK!
+Resultado: ✅ **Ambiente parece estar OK!**
 
 ---
 
-**Pronto! Agora faça o push e redeploy!** 🚀
+## ❓ Se não funcionar
+
+### A. Verificar packages.txt
+```bash
+cat packages.txt
+```
+
+Deve ter EXATAMENTE:
+```
+chromium
+chromium-driver
+fonts-liberation
+```
+
+### B. Forçar redeploy
+1. Clique em "Reboot" 
+2. Depois clique em "Redeploy"
+
+### C. Verificar logs
+- Procure por "chromium" sendo instalado
+- Não deve ter erros de "not found"
+
+---
+
+**Pronto! Faça o push e redeploy!** 🚀
+
+
 
