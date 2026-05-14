@@ -179,7 +179,36 @@ async def obter_rotas_disponiveis(url: str, progress_placeholder):
             progress_placeholder.info("⬜ Avançando para próxima página...")
             avancou = await ir_para_pagina_rotas(page)
             if not avancou:
+                # Diagnóstico detalhado para entender DOM no ambiente
+                info_lines = []
+                try:
+                    count_listbox = await page.locator("[role='listbox']").count()
+                    count_select = await page.locator("select").count()
+                    count_options = await page.locator("[role='option']").count()
+                    count_buttons = await page.locator("button").count()
+                    info_lines.append(f"listbox: {count_listbox}")
+                    info_lines.append(f"select: {count_select}")
+                    info_lines.append(f"options(role=option): {count_options}")
+                    info_lines.append(f"buttons: {count_buttons}")
+
+                    # coletar textos dos primeiros botões
+                    btns = page.locator("button")
+                    sample_btns = min(8, await btns.count())
+                    for i in range(sample_btns):
+                        txt = (await btns.nth(i).inner_text()) or ""
+                        info_lines.append(f"btn[{i}]: {txt.strip()}")
+
+                    # mostrar trecho do primeiro listbox/html
+                    lb = await page.query_selector("[role='listbox']")
+                    if lb:
+                        outer = await lb.evaluate("el => el.outerHTML.slice(0,400)")
+                        info_lines.append(f"listbox_html: {outer}")
+                except Exception as e:
+                    info_lines.append(f"diagnostic_error: {str(e)}")
+
                 progress_placeholder.error("❌ Não foi possível avançar para a página de rotas")
+                for line in info_lines:
+                    progress_placeholder.code(line)
                 return []
             
             # Página 2: Abrir dropdown
