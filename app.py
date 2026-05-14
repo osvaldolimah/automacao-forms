@@ -168,74 +168,75 @@ def criar_driver() -> webdriver.Chrome:
     # ── Flags essenciais para ambientes container / cloud ─────────────────────
     options.add_argument("--no-sandbox")               # Sem sandbox do kernel
     options.add_argument("--disable-setuid-sandbox")   # Sandbox extra desativada
-    options.add_argument("--no-zygote")                # Sem processo zygote (crítico em Docker)
-    options.add_argument("--disable-dev-shm-usage")    # Usa /tmp em vez de /dev/shm (limitado no cloud)
-
+    options.add_argument("--disable-dev-shm-usage")    # Usa /tmp em vez de /dev/shm
+    
     # ── GPU / renderização ────────────────────────────────────────────────────
     options.add_argument("--disable-gpu")
     options.add_argument("--disable-software-rasterizer")
     options.add_argument("--disable-accelerated-2d-canvas")
-    options.add_argument("--disable-gl-drawing-for-tests")
 
     # ── Estabilidade geral ────────────────────────────────────────────────────
     options.add_argument("--window-size=1920,1080")
     options.add_argument("--disable-extensions")
     options.add_argument("--disable-plugins")
     options.add_argument("--disable-sync")
-    options.add_argument("--disable-background-networking")
     options.add_argument("--disable-default-apps")
     options.add_argument("--disable-hang-monitor")
     options.add_argument("--disable-popup-blocking")
-    options.add_argument("--disable-translate")
     options.add_argument("--metrics-recording-only")
-    options.add_argument("--safebrowsing-disable-auto-update")
     options.add_argument("--log-level=3")
     options.add_argument("--disable-logging")
-    options.add_argument("--remote-debugging-port=0")
-    options.add_argument("--disable-ipc-flooding-protection")
 
-    # Caminhos conhecidos de binário do Chromium por distro (Streamlit Cloud)
-    CHROME_BINARIES = [
-        "/usr/bin/chromium-browser",   # Debian Bookworm (Streamlit Cloud atual)
-        "/usr/bin/chromium",           # Debian Trixie / Alpine
-        "/usr/bin/google-chrome",      # Google Chrome
+    # Tenta encontrar Chrome/Chromium instalado no sistema
+    CHROME_PATHS = [
+        "/usr/bin/chromium",           # Streamlit Cloud (Debian)
+        "/usr/bin/chromium-browser",   # Outras distribuições
+        "/usr/bin/google-chrome",
         "/usr/bin/google-chrome-stable",
+        "/snap/bin/chromium",          # Snap packages
+    ]
+    
+    CHROMEDRIVER_PATHS = [
+        "/usr/bin/chromedriver",
+        "/usr/local/bin/chromedriver",
     ]
 
-    # Tenta inicializar sem chromedriver explícito (Selenium 4+ pode auto-detectar)
-    chrome_bin = next((p for p in CHROME_BINARIES if os.path.exists(p)), None)
-    
-    if chrome_bin:
-        # Ambiente cloud/server: usa binário do sistema
-        options.binary_location = chrome_bin
-        try:
-            # Tenta sem Service (Selenium 4+ auto-encontra o chromedriver)
-            return webdriver.Chrome(options=options)
-        except Exception as e:
-            # Se falhar, tenta com Service e caminhos conhecidos
-            CHROMEDRIVER_PATHS = [
-                "/usr/bin/chromedriver",
-                "/usr/lib/chromium-browser/chromedriver",
-                "/usr/local/bin/chromedriver",
-                os.path.expanduser("~/.wdm/drivers/chromedriver"),
-            ]
-            driver_bin = next((p for p in CHROMEDRIVER_PATHS if os.path.exists(p)), None)
-            if driver_bin:
-                return webdriver.Chrome(service=Service(driver_bin), options=options)
-            raise e
+    # Detecta Chrome/Chromium disponível
+    chrome_path = next((p for p in CHROME_PATHS if os.path.exists(p)), None)
+    chromedriver_path = next((p for p in CHROMEDRIVER_PATHS if os.path.exists(p)), None)
 
-    # Fallback local: webdriver-manager (faz download automático)
+    if chrome_path:
+        options.binary_location = chrome_path
+        logging.info(f"Chrome encontrado em: {chrome_path}")
+
+    # Tenta criar driver com o que está disponível
     try:
-        from webdriver_manager.chrome import ChromeDriverManager
-        logging.getLogger('webdriver_manager').setLevel(logging.WARNING)
-        service = Service(ChromeDriverManager().install())
-        return webdriver.Chrome(service=service, options=options)
+        if chromedriver_path:
+            # Usar chromedriver explícito se encontrado
+            return webdriver.Chrome(service=Service(chromedriver_path), options=options)
+        else:
+            # Deixar Selenium encontrar automaticamente ou usar webdriver-manager
+            return webdriver.Chrome(options=options)
     except Exception as e:
-        raise RuntimeError(
-            f"❌ Chrome/Chromium não encontrado ({e}). "
-            "📝 Cloud: verifique se packages.txt foi atualizado e redeploy. "
-            "💻 Local: instale o Chrome ou confirme que webdriver-manager está em requirements.txt."
-        )
+        # Fallback: tentar com webdriver-manager
+        try:
+            from webdriver_manager.chrome import ChromeDriverManager
+            logging.getLogger('webdriver_manager').setLevel(logging.WARNING)
+            service = Service(ChromeDriverManager().install())
+            return webdriver.Chrome(service=service, options=options)
+        except Exception as e2:
+            raise RuntimeError(
+                f"❌ Não foi possível inicializar o ChromeDriver.\n"
+                f"Erro 1: {e}\n"
+                f"Erro 2: {e2}\n\n"
+                f"📝 Solução para Streamlit Cloud:\n"
+                f"  1. Certifique-se que packages.txt contém 'chromium' e 'chromium-driver'\n"
+                f"  2. Clique em 'Redeploy' (não apenas reload)\n"
+                f"  3. Aguarde a instalação completar\n\n"
+                f"💻 Solução Local:\n"
+                f"  1. Instale Google Chrome\n"
+                f"  2. Adicione webdriver-manager em requirements.txt"
+            )
 
 
 def obter_rotas_disponiveis(

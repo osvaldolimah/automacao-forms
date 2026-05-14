@@ -1,113 +1,138 @@
 # 🚀 Guia de Deployment - Streamlit Cloud
 
-## Problema: Automação não funciona no Streamlit Cloud
+## ⚠️ ERRO ENCONTRADO E CORRIGIDO
 
-O Streamlit Cloud não possui Chrome/Chromium pré-instalado por padrão. Para que a automação com Selenium funcione, é necessário instalar essas dependências do sistema.
+Ocorreu um erro durante o primeiro deployment:
+```
+E: Package 'chromium-browser' has no installation candidate
+```
+
+✅ **Solução implementada:** Veja [STREAMLIT_CLOUD_FIX.md](STREAMLIT_CLOUD_FIX.md) para detalhes
 
 ---
 
-## ✅ Solução: Atualizar `packages.txt`
+## ✅ Solução: Atualizar e Redeploy
 
 ### O que foi feito:
-1. **Atualizado `packages.txt`** com todas as dependências necessárias do Debian
-2. **Melhorado `app.py`** para detectar automaticamente o Chromium no Streamlit Cloud
-3. **Adicionado fallback** para ambientes locais com `webdriver-manager`
+1. **Simplificado `packages.txt`** de 55 para 6 pacotes essenciais
+2. **Melhorado `app.py`** para auto-detectar Chromium
+3. **Adicionado fallback** para webdriver-manager
 
 ### Passos para Deploy:
 
 #### 1️⃣ **Verificar arquivos localmente**
 ```bash
 # Confirme que estes arquivos foram atualizados:
-- packages.txt        ← Contém dependências do Debian
-- requirements.txt    ← Contém pacotes Python
-- app.py             ← Contém lógica de detecção de Chrome
-- .streamlit/config.toml
+- packages.txt        ← Agora com apenas 6 pacotes
+- app.py             ← Função criar_driver() otimizada
+```
+
+**Novo `packages.txt` deve conter:**
+```
+chromium
+chromium-driver
+xvfb
+libxi6
+libgconf-2-4
+fonts-liberation
 ```
 
 #### 2️⃣ **Fazer commit e push**
 ```bash
-git add packages.txt requirements.txt app.py
-git commit -m "fix: Adicionar suporte para Chromium no Streamlit Cloud"
+git add packages.txt app.py
+git commit -m "Fix: Simplificar packages.txt para Streamlit Cloud"
 git push origin main
 ```
 
-#### 3️⃣ **Redeployar no Streamlit Cloud**
+#### 3️⃣ **Redeploy no Streamlit Cloud** (IMPORTANTE)
 - Acesse [https://share.streamlit.io](https://share.streamlit.io)
-- Clique em "Redeploy" para a sua aplicação
-- **NÃO** cancele o deployment até ele terminar
-- Acompanhe os logs para ver se Chromium está sendo instalado
+- Clique em "Redeploy" (NÃO reload!)
+- Aguarde até ver "App is live"
+
+**Logs esperados:**
+```
+[12:11:14] 📦 Processing dependencies...
+[12:11:14] 📦 Apt dependencies were installed from packages.txt
+[12:11:XX] 🚀 App is live!
+```
 
 #### 4️⃣ **Verificar Logs**
-Durante o deployment, você verá logs como:
-```
-[installer] Installing packages...
-[installer] chromium-browser
-[installer] fonts-liberation
-[installer] libappindicator3-1
-...
-```
+- Durante deployment, clique em "Logs"
+- Procure por "chromium" sendo instalado
+- Não deve haver erros de "not found"
 
 ---
 
 ## 📋 Arquivos Necessários
 
-### `requirements.txt`
+### `requirements.txt` ✅
 ```
 streamlit>=1.32.0
 selenium>=4.18.0
 webdriver-manager>=4.0.1
 ```
 
-### `packages.txt`
-Contém 50+ pacotes de dependência do Debian (veja arquivo atual)
+### `packages.txt` ✅ (SIMPLIFICADO)
+```
+chromium
+chromium-driver
+xvfb
+libxi6
+libgconf-2-4
+fonts-liberation
+```
 
-### `.streamlit/config.toml`
-Configuração do tema e comportamento do Streamlit
+### `.streamlit/config.toml` ✅
+Configuração do tema e comportamento
 
 ---
 
-## 🔍 Diagnosticar Problemas
+## 🔍 Se Não Funcionar
 
-### Se ainda não funcionar:
+### Erro: "Package chromium-browser has no installation candidate"
+**Solução:**
+- Verifique que `packages.txt` tem exatamente os 6 pacotes acima
+- Remova espaços em branco extras
+- Clique em "Redeploy" (não reload)
 
-**1. Verifique os logs do deployment:**
-- Procure por erros como "chromium-browser not found"
-- Se houver erro de espaço, talvez algum pacote não tenha sido instalado
+### Erro: "Chrome not found"
+**Solução:**
+- Rode `python diagnostico.py` localmente
+- Se funcionar localmente, o problema é só no deployment
+- Tente "Reboot" depois "Redeploy"
 
-**2. Teste localmente primeiro:**
-```bash
-# Ativar ambiente virtual
-.\.venv\Scripts\Activate.ps1
+### Timeout ou Erro de Conexão
+**Solução:**
+- Aumentar `TIMEOUT_PADRAO` e `TIMEOUT_ENVIO`
+- Verificar URL do formulário
+- Testar com formulário simples primeiro
 
-# Testar app
-streamlit run app.py
-```
+---
 
-**3. Se local funciona mas cloud não:**
-- Verifique se `packages.txt` tem exatamente os pacotes certos
-- Tente remover espaços em branco extras no arquivo
-- Redeploy novamente
+## ✅ Checklist Final
+
+- [ ] Confirmou que `packages.txt` tem 6 linhas
+- [ ] Confirmou que `app.py` foi atualizado
+- [ ] Rodou `python diagnostico.py` com sucesso
+- [ ] Fez `git push` para GitHub
+- [ ] Clicou em "Redeploy" (NÃO reload)
+- [ ] Aguardou até "App is live"
+- [ ] Verificou os logs
+- [ ] Testou a URL do app
+- [ ] Confirmou "Mapear Rotas" funciona
 
 ---
 
 ## 📚 Referências
 
-- [Streamlit Cloud Docs - System Dependencies](https://docs.streamlit.io/streamlit-community-cloud/deploy-your-app/app-dependencies)
-- [Selenium Python Docs](https://selenium-python.readthedocs.io/)
-- [Chrome/Chromium no Debian](https://wiki.debian.org/Chromium)
+- [Streamlit Cloud Docs](https://docs.streamlit.io/streamlit-community-cloud)
+- [Streamlit Cloud System Dependencies](https://docs.streamlit.io/streamlit-community-cloud/deploy-your-app/app-dependencies)
+- [STREAMLIT_CLOUD_FIX.md](STREAMLIT_CLOUD_FIX.md) - Detalhes técnicos do fix
 
 ---
 
-## ⚠️ Possíveis Alternativas (se ainda não funcionar)
+**Status:** ✅ Corrigido e pronto para deployment
+**Data:** 14 de maio de 2026
 
-Se o deployment no Streamlit Cloud continuar falhando, existem alternativas:
 
-### Opção A: Usar Heroku (deprecated - não recomendado)
-### Opção B: Deploy em seu próprio servidor (VPS)
-### Opção C: Usar serviço como Railway, Render, ou PythonAnywhere
-### Opção D: Reescrever com API (sem Selenium, mas sem automação de cliques)
-
----
-
-**Última atualização:** 14 de maio de 2026
 
