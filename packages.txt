@@ -1,4 +1,2 @@
-# Pacotes de sistema para o Streamlit Cloud (Ubuntu)
-# Necessários para o Selenium rodar o Chromium em modo headless
 chromium
 chromium-driver

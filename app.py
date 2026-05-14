@@ -158,34 +158,41 @@ def criar_driver() -> webdriver.Chrome:
     options.add_argument("--disable-logging")
     options.add_argument("--remote-debugging-port=0")
 
-    # 1ª tentativa: webdriver-manager (desenvolvimento local)
+    # Caminhos conhecidos de binário do Chromium por distro
+    CHROME_BINARIES = [
+        "/usr/bin/chromium",           # Debian Trixie (Streamlit Cloud)
+        "/usr/bin/chromium-browser",   # Ubuntu / Debian Bullseye
+        "/usr/bin/google-chrome",      # Google Chrome
+        "/usr/bin/google-chrome-stable",
+    ]
+    # Caminhos conhecidos do ChromeDriver
+    CHROMEDRIVER_PATHS = [
+        "/usr/bin/chromedriver",                      # Debian Trixie
+        "/usr/lib/chromium/chromedriver",             # Algumas distros
+        "/usr/lib/chromium-browser/chromedriver",     # Ubuntu older
+    ]
+
+    # Detecta se está em ambiente cloud (sem webdriver-manager disponível ou sem rede)
+    chrome_bin  = next((p for p in CHROME_BINARIES    if os.path.exists(p)), None)
+    driver_bin  = next((p for p in CHROMEDRIVER_PATHS if os.path.exists(p)), None)
+
+    if chrome_bin and driver_bin:
+        # Ambiente cloud/server: usa binários do sistema
+        options.binary_location = chrome_bin
+        return webdriver.Chrome(service=Service(driver_bin), options=options)
+
+    # Fallback local: webdriver-manager (faz download automático)
     try:
         from webdriver_manager.chrome import ChromeDriverManager
         logging.getLogger('webdriver_manager').setLevel(logging.WARNING)
         service = Service(ChromeDriverManager().install())
         return webdriver.Chrome(service=service, options=options)
-    except Exception:
-        pass
-
-    # 2ª tentativa: binários do sistema (Streamlit Cloud / Linux)
-    for binary in ["/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome"]:
-        if os.path.exists(binary):
-            options.binary_location = binary
-            break
-
-    for driver_path in [
-        "/usr/bin/chromedriver",
-        "/usr/lib/chromium/chromedriver",
-        "/usr/lib/chromium-browser/chromedriver",
-    ]:
-        if os.path.exists(driver_path):
-            return webdriver.Chrome(service=Service(driver_path), options=options)
-
-    raise RuntimeError(
-        "Chrome/Chromium não encontrado. "
-        "Local: instale via webdriver-manager. "
-        "Cloud: adicione chromium + chromium-driver no packages.txt"
-    )
+    except Exception as e:
+        raise RuntimeError(
+            f"Chrome/Chromium não encontrado ({e}). "
+            "Cloud: certifique-se que packages.txt contém 'chromium' e 'chromium-driver'. "
+            "Local: instale o Chrome ou adicione webdriver-manager ao requirements.txt."
+        )
 
 
 def obter_rotas_disponiveis(
