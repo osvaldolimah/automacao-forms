@@ -78,7 +78,7 @@ git push origin main
 
 #### 3. Acompanhar deployment
 - Observe os logs de instalação
-- Procure por mensagens de instalação de `chromium-browser`
+- Procure por mensagens de instalação de `chromium`
 - Deployment completo quando ver "App is live"
 
 #### 4. Testar
@@ -89,9 +89,15 @@ git push origin main
 
 #### Problema: "Chrome not found"
 **Solução:**
-1. Verificar que `packages.txt` tem os pacotes corretos
+1. Verificar que `packages.txt` tem exatamente `chromium`, `chromium-driver` e `fonts-liberation`
 2. Fazer novo "Redeploy" (não apenas recarregar)
 3. Aguardar o deployment completar
+
+#### Problema: botão não encontrado
+**Solução:**
+1. Verificar se o formulário está em PT ou EN
+2. Conferir os logs em "Ver Logs da Última Execução"
+3. Confirmar que o botão pode aparecer como "Next" ou "Submit"
 
 #### Problema: Timeout ou erro de conexão
 **Solução:**
@@ -175,7 +181,6 @@ Edite os arrays `BAIRROS_DEFAULT` e `BAIRROS_PREFERIDOS_DEFAULT` no código para
    - Seleciona a rota
    - Preenche telefone
    - Envia o formulário
-   - Confirma sucesso
    - Aguarda intervalo antes do próximo
 
 ## 🐛 Troubleshooting

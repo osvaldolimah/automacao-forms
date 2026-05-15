@@ -1,39 +1,27 @@
 # 🚀 Guia de Deployment - Streamlit Cloud
 
-## ⚠️ ERRO ENCONTRADO E CORRIGIDO
+## ✅ Status Atual
 
-Ocorreu um erro durante o primeiro deployment:
-```
-E: Package 'chromium-browser' has no installation candidate
-```
+A aplicação já está funcionando no Streamlit Cloud.
 
-✅ **Solução implementada:** Veja [STREAMLIT_CLOUD_FIX.md](STREAMLIT_CLOUD_FIX.md) para detalhes
-
----
-
-## ✅ Solução: Atualizar e Redeploy
-
-### O que foi feito:
-1. **Simplificado `packages.txt`** de 55 para 6 pacotes essenciais
-2. **Melhorado `app.py`** para auto-detectar Chromium
-3. **Adicionado fallback** para webdriver-manager
+### O que foi feito
+1. `packages.txt` foi reduzido para os pacotes essenciais
+2. `app.py` foi ajustado para funcionar em ambiente headless
+3. O fluxo de mapeamento e envio foi validado no Cloud
 
 ### Passos para Deploy:
 
 #### 1️⃣ **Verificar arquivos localmente**
 ```bash
 # Confirme que estes arquivos foram atualizados:
-- packages.txt        ← Agora com apenas 6 pacotes
-- app.py             ← Função criar_driver() otimizada
+- packages.txt        ← Agora com apenas 3 pacotes
+- app.py             ← Função criar_driver() otimizada e estável
 ```
 
-**Novo `packages.txt` deve conter:**
+**`packages.txt` deve conter:**
 ```
 chromium
 chromium-driver
-xvfb
-libxi6
-libgconf-2-4
 fonts-liberation
 ```
 
@@ -59,7 +47,7 @@ git push origin main
 #### 4️⃣ **Verificar Logs**
 - Durante deployment, clique em "Logs"
 - Procure por "chromium" sendo instalado
-- Não deve haver erros de "not found"
+- Se aparecer erro, confirme se é um redeploy novo e não um reload
 
 ---
 
@@ -76,9 +64,6 @@ webdriver-manager>=4.0.1
 ```
 chromium
 chromium-driver
-xvfb
-libxi6
-libgconf-2-4
 fonts-liberation
 ```
 
@@ -89,17 +74,11 @@ Configuração do tema e comportamento
 
 ## 🔍 Se Não Funcionar
 
-### Erro: "Package chromium-browser has no installation candidate"
-**Solução:**
-- Verifique que `packages.txt` tem exatamente os 6 pacotes acima
-- Remova espaços em branco extras
-- Clique em "Redeploy" (não reload)
-
 ### Erro: "Chrome not found"
 **Solução:**
-- Rode `python diagnostico.py` localmente
-- Se funcionar localmente, o problema é só no deployment
-- Tente "Reboot" depois "Redeploy"
+- Verifique que `packages.txt` tem exatamente 3 pacotes
+- Faça um novo "Redeploy" (não apenas reload)
+- Aguarde o deployment completar
 
 ### Timeout ou Erro de Conexão
 **Solução:**
@@ -111,7 +90,7 @@ Configuração do tema e comportamento
 
 ## ✅ Checklist Final
 
-- [ ] Confirmou que `packages.txt` tem 6 linhas
+- [ ] Confirmou que `packages.txt` tem 3 linhas
 - [ ] Confirmou que `app.py` foi atualizado
 - [ ] Rodou `python diagnostico.py` com sucesso
 - [ ] Fez `git push` para GitHub
@@ -131,7 +110,7 @@ Configuração do tema e comportamento
 
 ---
 
-**Status:** ✅ Corrigido e pronto para deployment
+**Status:** ✅ Aplicação estável e funcionando no Cloud
 **Data:** 14 de maio de 2026
 
 
