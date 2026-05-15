@@ -75,6 +75,8 @@ init_state()
 def make_log_fn(placeholder):
     """Retorna uma função de log que atualiza o placeholder em tempo real."""
     def log(msg: str, nivel: str = "INFO"):
+        if nivel == "DEBUG":
+            return
         icons = {"INFO": "ℹ️", "OK": "✅", "ERRO": "❌", "WARN": "⚠️",
                  "PROC": "⚙️", "RETRY": "🔁", "WAIT": "⏳", "MAP": "🗺️"}
         icon = icons.get(nivel, "•")
