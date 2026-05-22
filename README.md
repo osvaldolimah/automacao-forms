@@ -126,6 +126,18 @@ Este script verifica:
 - ✅ Selenium funcionando
 - ✅ Arquivos de configuração
 
+### Executar rotina de simulação
+```bash
+python teste_simulacao_forms.py --headless --rota "Fortaleza - Cambeba - E-27 - UTILITARIO"
+```
+
+Também é possível testar com HTML salvo localmente:
+```bash
+python teste_simulacao_forms.py --html caminho\para\form.html --headless
+```
+
+Essa rotina preenche nome, ID, rota e telefone sem fazer o envio final.
+
 ## 📋 Estrutura de Arquivos
 
 ```
