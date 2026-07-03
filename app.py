@@ -593,7 +593,7 @@ with st.sidebar:
 # ── Main ──────────────────────────────────────────────────────
 st.title("📋 Automação Google Forms")
 
-tab_escala, tab_outro = st.tabs(["Formulário de Escala", "Outro Formulário"])
+tab_escala = st.tabs(["Formulário de Escala"])[0]
 
 with tab_escala:
     st.markdown("Preenche e envia formulários de escala automaticamente com base nos bairros configurados.")
@@ -764,21 +764,6 @@ with tab_escala:
                     st.error("Nenhum formulário foi enviado com sucesso. Verifique os logs.")
                 else:
                     st.warning(f"{sucesso_count} enviado(s) com sucesso, {falha_count} com falha.")
-
-with tab_outro:
-    st.markdown("Preenche um outro formulário diferente da escala.")
-
-    url_outro = st.text_input(
-        "🔗 URL do Outro Formulário Google",
-        placeholder="https://docs.google.com/forms/d/e/.../viewform",
-        label_visibility="visible",
-        key="url_outro"
-    )
-    
-    st.info("Aqui você pode criar os inputs específicos para esse novo formulário e invocar uma função de preenchimento.")
-    
-    if st.button("🚀 Enviar Outro Formulário", type="primary"):
-        st.success("A lógica de preenchimento para este formulário será construída aqui.")
 
 # ── Log persistente (após execução) ──────────────────────────
 if st.session_state.logs and st.session_state.fase not in ("enviando",):
