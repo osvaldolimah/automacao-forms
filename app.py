@@ -43,7 +43,7 @@ MAX_TENTATIVAS = 2
 INTERVALO_RETRY = 2
 
 BAIRROS_DEFAULT = [
-    "Cambeba", "Guararapes", "Benfica", "Itaperi", "Rodolfo Teófilo", "Cajazeiras",
+    "Cambeba", "Guararapes", "Itaperi", "Rodolfo Teófilo", "Cajazeiras",
     "Aerolândia", "Alto da Balança", "Boa Vista", "Luciano Cavalcante",
     "Dias Macedo", "Damas", "Montese", "Jardim América", "Parreão",
     "Fátima", "Serrinha", "Cidade dos Funcionários", "Parque Iracema",
