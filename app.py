@@ -242,36 +242,49 @@ def ordenar_rotas_por_preferencia(rotas: List[str], bairros_preferidos: List[str
     rotas_preferidas.sort(key=lambda x: x[0])
     return [r for _, r in rotas_preferidas] + rotas_restantes
 
+
+def _criar_opcoes_chrome(headless_arg: str, conservador: bool = False) -> webdriver.ChromeOptions:
+    options = webdriver.ChromeOptions()
+
+    options.add_argument(headless_arg)
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-setuid-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument("--remote-debugging-port=9222")
+
+    if conservador:
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-sync")
+        options.add_argument("--disable-default-apps")
+        options.add_argument("--log-level=3")
+        options.add_argument("--disable-logging")
+    else:
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument(
+            "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+        options.add_argument("--no-first-run")
+        options.add_argument("--no-default-browser-check")
+        options.add_argument("--disable-browser-side-navigation")
+        options.add_argument("--disable-client-side-phishing-detection")
+
+    return options
+
+
+def _criar_webdriver(options: webdriver.ChromeOptions, chromedriver_path: str | None):
+    if chromedriver_path:
+        return webdriver.Chrome(service=Service(chromedriver_path), options=options)
+    return webdriver.Chrome(options=options)
+
 # ==================== SELENIUM ====================
 def criar_driver() -> webdriver.Chrome:
     """
     Cria o ChromeDriver com suporte a ambiente local e Streamlit Cloud.
     Headless é sempre ativado (obrigatório em ambiente cloud/server).
     """
-    options = webdriver.ChromeOptions()
-
-    # ── Modo headless ─────────────────────────────────────────────────────────
-    options.add_argument("--headless=new")
-
-    # ── Flags essenciais para ambientes container / cloud ─────────────────────
-    options.add_argument("--no-sandbox")               # Sem sandbox do kernel
-    options.add_argument("--disable-setuid-sandbox")   # Sandbox extra desativada
-    options.add_argument("--disable-dev-shm-usage")    # Usa /tmp em vez de /dev/shm
-
-    # ── GPU / renderização (desabilitar para estabilidade) ────────────────────
-    options.add_argument("--disable-gpu")
-
-    # ── Janela padrão ─────────────────────────────────────────────────────────
-    options.add_argument("--window-size=1920,1080")
-    
-    # ── Estabilidade em container / headless ──────────────────────────────────
-    options.add_argument("--disable-blink-features=AutomationControlled")  # Evita detecção
-    options.add_argument("--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-    options.add_argument("--no-first-run")              # Skip first-run tasks
-    options.add_argument("--no-default-browser-check")  # Skip browser check
-    options.add_argument("--disable-browser-side-navigation")
-    options.add_argument("--disable-client-side-phishing-detection")
-
     # Tenta encontrar Chrome/Chromium instalado no sistema
     CHROME_PATHS = [
         "/usr/bin/chromium",           # Streamlit Cloud (Debian)
@@ -291,37 +304,55 @@ def criar_driver() -> webdriver.Chrome:
     chromedriver_path = next((p for p in CHROMEDRIVER_PATHS if os.path.exists(p)), None)
 
     if chrome_path:
-        options.binary_location = chrome_path
         logging.info(f"Chrome encontrado em: {chrome_path}")
 
-    # Tenta criar driver com o que está disponível
-    try:
-        if chromedriver_path:
-            # Usar chromedriver explícito se encontrado
-            return webdriver.Chrome(service=Service(chromedriver_path), options=options)
-        else:
-            # Deixar Selenium encontrar automaticamente ou usar webdriver-manager
-            return webdriver.Chrome(options=options)
-    except Exception as e:
-        # Fallback: tentar com webdriver-manager
+    tentativas = [
+        ("--headless=new", False),
+        ("--headless", False),
+        ("--headless", True),
+    ]
+    erros = []
+
+    for headless_arg, conservador in tentativas:
+        options = _criar_opcoes_chrome(headless_arg, conservador=conservador)
+        if chrome_path:
+            options.binary_location = chrome_path
+
         try:
-            from webdriver_manager.chrome import ChromeDriverManager
-            logging.getLogger('webdriver_manager').setLevel(logging.WARNING)
-            service = Service(ChromeDriverManager().install())
-            return webdriver.Chrome(service=service, options=options)
-        except Exception as e2:
-            raise RuntimeError(
-                f"❌ Não foi possível inicializar o ChromeDriver.\n"
-                f"Erro 1: {e}\n"
-                f"Erro 2: {e2}\n\n"
-                f"📝 Solução para Streamlit Cloud:\n"
-                f"  1. Certifique-se que packages.txt contém 'chromium' e 'chromium-driver'\n"
-                f"  2. Clique em 'Redeploy' (não apenas reload)\n"
-                f"  3. Aguarde a instalação completar\n\n"
-                f"💻 Solução Local:\n"
-                f"  1. Instale Google Chrome\n"
-                f"  2. Adicione webdriver-manager em requirements.txt"
+            return _criar_webdriver(options, chromedriver_path)
+        except Exception as e:
+            erros.append(e)
+            logging.warning(
+                "Falha ao iniciar Chrome com %s (%s): %s",
+                headless_arg,
+                "conservador" if conservador else "padrão",
+                str(e)[:200],
             )
+
+    try:
+        from webdriver_manager.chrome import ChromeDriverManager
+
+        logging.getLogger('webdriver_manager').setLevel(logging.WARNING)
+        options = _criar_opcoes_chrome("--headless", conservador=True)
+        if chrome_path:
+            options.binary_location = chrome_path
+
+        service = Service(ChromeDriverManager().install())
+        return webdriver.Chrome(service=service, options=options)
+    except Exception as e2:
+        erros.append(e2)
+        raise RuntimeError(
+            f"❌ Não foi possível inicializar o ChromeDriver.\n"
+            f"Erro 1: {erros[0]}\n"
+            f"Erro 2: {erros[1] if len(erros) > 1 else e2}\n\n"
+            f"📝 Solução para Streamlit Cloud:\n"
+            f"  1. Certifique-se que packages.txt contém 'chromium' e 'chromium-driver'\n"
+            f"  2. Clique em 'Redeploy' (não apenas reload)\n"
+            f"  3. Aguarde a instalação completar\n\n"
+            f"💻 Solução Local:\n"
+            f"  1. Instale Google Chrome\n"
+            f"  2. Adicione webdriver-manager em requirements.txt"
+        )
 
 
 def obter_rotas_disponiveis(
