@@ -1,5 +1,6 @@
 import logging
 import os
+import tempfile
 import time
 import unicodedata
 from typing import List
@@ -247,12 +248,23 @@ def _criar_opcoes_chrome(headless_arg: str, conservador: bool = False) -> webdri
     options = webdriver.ChromeOptions()
 
     options.add_argument(headless_arg)
+    options.add_argument("--user-data-dir=" + tempfile.mkdtemp(prefix="chrome-profile-"))
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-setuid-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
+    options.add_argument("--disable-software-rasterizer")
     options.add_argument("--window-size=1920,1080")
     options.add_argument("--remote-debugging-port=9222")
+    options.add_argument("--disable-background-networking")
+    options.add_argument("--disable-background-timer-throttling")
+    options.add_argument("--disable-backgrounding-occluded-windows")
+    options.add_argument("--disable-breakpad")
+    options.add_argument("--disable-component-update")
+    options.add_argument("--disable-features=Translate,BackForwardCache,VizDisplayCompositor,UseSkiaRenderer")
+    options.add_argument("--disable-renderer-backgrounding")
+    options.add_argument("--disable-translate")
+    options.add_argument("--mute-audio")
 
     if conservador:
         options.add_argument("--disable-extensions")
@@ -260,6 +272,8 @@ def _criar_opcoes_chrome(headless_arg: str, conservador: bool = False) -> webdri
         options.add_argument("--disable-default-apps")
         options.add_argument("--log-level=3")
         options.add_argument("--disable-logging")
+        options.add_argument("--single-process")
+        options.add_argument("--no-zygote")
     else:
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_argument(
