@@ -1,8 +1,12 @@
 import logging
 import os
+import sys
 import tempfile
 import time
 import unicodedata
+import platform
+import subprocess
+import traceback
 from typing import List
 from urllib.parse import urlparse
 
@@ -87,6 +91,66 @@ def make_log_fn(placeholder):
         content = "\n".join(st.session_state.logs[-100:])  # Últimas 100 linhas
         placeholder.markdown(f'<div class="log-box">{content}</div>', unsafe_allow_html=True)
     return log
+
+
+def _versao_binario(caminho: str) -> str:
+    try:
+        resultado = subprocess.run(
+            [caminho, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        saida = (resultado.stdout or resultado.stderr or "").strip()
+        return saida or "versão indisponível"
+    except Exception as exc:
+        return f"erro ao consultar versão: {exc}"
+
+
+def _coletar_diagnostico_ambiente(chrome_path: str | None, chromedriver_path: str | None) -> List[str]:
+    dados = [
+        f"SO: {platform.platform()}",
+        f"Python: {platform.python_version()}",
+        f"Executável Python: {sys.executable}",
+        f"Chrome detectado: {chrome_path or 'não encontrado'}",
+        f"ChromeDriver detectado: {chromedriver_path or 'não encontrado'}",
+    ]
+
+    if chrome_path:
+        dados.append(f"Chrome versão: {_versao_binario(chrome_path)}")
+    if chromedriver_path:
+        dados.append(f"ChromeDriver versão: {_versao_binario(chromedriver_path)}")
+
+    return dados
+
+
+def _log_diagnostico_ambiente(log, chrome_path: str | None, chromedriver_path: str | None) -> None:
+    log("Diagnóstico do ambiente Chrome:", "MAP")
+    for linha in _coletar_diagnostico_ambiente(chrome_path, chromedriver_path):
+        log(f"  {linha}", "MAP")
+
+
+def _detectar_binarios_chrome() -> tuple[str | None, str | None]:
+    chrome_paths = [
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/snap/bin/chromium",
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    ]
+
+    chromedriver_paths = [
+        "/usr/bin/chromedriver",
+        "/usr/local/bin/chromedriver",
+        r"C:\chromedriver.exe",
+    ]
+
+    chrome_path = next((caminho for caminho in chrome_paths if os.path.exists(caminho)), None)
+    chromedriver_path = next((caminho for caminho in chromedriver_paths if os.path.exists(caminho)), None)
+    return chrome_path, chromedriver_path
 
 # ==================== FUNÇÕES AUXILIARES ====================
 def remover_acentos(texto: str) -> str:
@@ -288,6 +352,50 @@ def _criar_opcoes_chrome(headless_arg: str, conservador: bool = False) -> webdri
     return options
 
 
+def _lista_argumentos_chrome(headless_arg: str, conservador: bool = False) -> List[str]:
+    args = [
+        headless_arg,
+        "--user-data-dir=temp-profile",
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--disable-software-rasterizer",
+        "--window-size=1920,1080",
+        "--remote-debugging-port=9222",
+        "--disable-background-networking",
+        "--disable-background-timer-throttling",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-breakpad",
+        "--disable-component-update",
+        "--disable-features=Translate,BackForwardCache,VizDisplayCompositor,UseSkiaRenderer",
+        "--disable-renderer-backgrounding",
+        "--disable-translate",
+        "--mute-audio",
+    ]
+
+    if conservador:
+        args.extend([
+            "--disable-extensions",
+            "--disable-sync",
+            "--disable-default-apps",
+            "--log-level=3",
+            "--disable-logging",
+            "--single-process",
+            "--no-zygote",
+        ])
+    else:
+        args.extend([
+            "--disable-blink-features=AutomationControlled",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--disable-browser-side-navigation",
+            "--disable-client-side-phishing-detection",
+        ])
+
+    return args
+
+
 def _criar_webdriver(options: webdriver.ChromeOptions, chromedriver_path: str | None):
     if chromedriver_path:
         return webdriver.Chrome(service=Service(chromedriver_path), options=options)
@@ -299,26 +407,14 @@ def criar_driver() -> webdriver.Chrome:
     Cria o ChromeDriver com suporte a ambiente local e Streamlit Cloud.
     Headless é sempre ativado (obrigatório em ambiente cloud/server).
     """
-    # Tenta encontrar Chrome/Chromium instalado no sistema
-    CHROME_PATHS = [
-        "/usr/bin/chromium",           # Streamlit Cloud (Debian)
-        "/usr/bin/chromium-browser",   # Outras distribuições
-        "/usr/bin/google-chrome",
-        "/usr/bin/google-chrome-stable",
-        "/snap/bin/chromium",          # Snap packages
-    ]
-    
-    CHROMEDRIVER_PATHS = [
-        "/usr/bin/chromedriver",
-        "/usr/local/bin/chromedriver",
-    ]
-
-    # Detecta Chrome/Chromium disponível
-    chrome_path = next((p for p in CHROME_PATHS if os.path.exists(p)), None)
-    chromedriver_path = next((p for p in CHROMEDRIVER_PATHS if os.path.exists(p)), None)
+    chrome_path, chromedriver_path = _detectar_binarios_chrome()
 
     if chrome_path:
         logging.info(f"Chrome encontrado em: {chrome_path}")
+
+    logging.info("Iniciando diagnóstico de ambiente do Chrome")
+    for linha in _coletar_diagnostico_ambiente(chrome_path, chromedriver_path):
+        logging.info(linha)
 
     tentativas = [
         ("--headless=new", False),
@@ -342,6 +438,8 @@ def criar_driver() -> webdriver.Chrome:
                 "conservador" if conservador else "padrão",
                 str(e)[:200],
             )
+            logging.warning("Argumentos usados: %s", _lista_argumentos_chrome(headless_arg, conservador=conservador))
+            logging.warning("Stacktrace da tentativa:\n%s", traceback.format_exc())
 
     try:
         from webdriver_manager.chrome import ChromeDriverManager
@@ -355,6 +453,7 @@ def criar_driver() -> webdriver.Chrome:
         return webdriver.Chrome(service=service, options=options)
     except Exception as e2:
         erros.append(e2)
+        logging.error("Falha final ao inicializar ChromeDriver:\n%s", traceback.format_exc())
         raise RuntimeError(
             f"❌ Não foi possível inicializar o ChromeDriver.\n"
             f"Erro 1: {erros[0]}\n"
@@ -376,6 +475,8 @@ def obter_rotas_disponiveis(
     driver = None
     try:
         log("Iniciando ChromeDriver para mapeamento...", "MAP")
+        chrome_path, chromedriver_path = _detectar_binarios_chrome()
+        _log_diagnostico_ambiente(log, chrome_path, chromedriver_path)
         driver = criar_driver()
         log("✅ ChromeDriver iniciado", "MAP")
         
@@ -492,9 +593,8 @@ def obter_rotas_disponiveis(
         return rotas_encontradas
 
     except Exception as e:
-        log(f"❌ Erro no mapeamento: {str(e)[:120]}", "ERRO")
-        import traceback
-        log(f"Stacktrace: {traceback.format_exc()[:200]}", "DEBUG")
+        log(f"❌ Erro no mapeamento: {type(e).__name__}: {str(e)[:180]}", "ERRO")
+        log(f"Stacktrace completo:\n{traceback.format_exc()}", "ERRO")
         return []
     finally:
         if driver:
@@ -512,6 +612,8 @@ def enviar_formulario(
     driver = None
     try:
         log(f"[Tentativa {tentativa}/{MAX_TENTATIVAS}] Iniciando envio: {rota}", "PROC")
+        chrome_path, chromedriver_path = _detectar_binarios_chrome()
+        _log_diagnostico_ambiente(log, chrome_path, chromedriver_path)
         driver = criar_driver()
         log("  ✅ ChromeDriver criado", "DEBUG")
         
@@ -584,9 +686,8 @@ def enviar_formulario(
         return True
 
     except Exception as e:
-        log(f"❌ Falha no envio de '{rota}': {str(e)[:100]}", "ERRO")
-        import traceback
-        log(f"   Stacktrace: {traceback.format_exc()[:150]}", "DEBUG")
+        log(f"❌ Falha no envio de '{rota}': {type(e).__name__}: {str(e)[:180]}", "ERRO")
+        log(f"   Stacktrace completo:\n{traceback.format_exc()}", "ERRO")
         
         if tentativa < MAX_TENTATIVAS:
             log(f"🔁 Aguardando {INTERVALO_RETRY}s antes de retry...", "RETRY")
