@@ -312,32 +312,15 @@ def _criar_opcoes_chrome(headless_arg: str, conservador: bool = False) -> webdri
     options = webdriver.ChromeOptions()
 
     options.add_argument(headless_arg)
-    options.add_argument("--user-data-dir=" + tempfile.mkdtemp(prefix="chrome-profile-"))
     options.add_argument("--no-sandbox")
-    options.add_argument("--disable-setuid-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    options.add_argument("--disable-software-rasterizer")
     options.add_argument("--window-size=1920,1080")
-    options.add_argument("--remote-debugging-port=9222")
-    options.add_argument("--disable-background-networking")
-    options.add_argument("--disable-background-timer-throttling")
-    options.add_argument("--disable-backgrounding-occluded-windows")
-    options.add_argument("--disable-breakpad")
-    options.add_argument("--disable-component-update")
-    options.add_argument("--disable-features=Translate,BackForwardCache,VizDisplayCompositor,UseSkiaRenderer")
-    options.add_argument("--disable-renderer-backgrounding")
     options.add_argument("--disable-translate")
-    options.add_argument("--mute-audio")
 
     if conservador:
         options.add_argument("--disable-extensions")
         options.add_argument("--disable-sync")
-        options.add_argument("--disable-default-apps")
-        options.add_argument("--log-level=3")
-        options.add_argument("--disable-logging")
-        options.add_argument("--single-process")
-        options.add_argument("--no-zygote")
     else:
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_argument(
@@ -346,8 +329,6 @@ def _criar_opcoes_chrome(headless_arg: str, conservador: bool = False) -> webdri
         )
         options.add_argument("--no-first-run")
         options.add_argument("--no-default-browser-check")
-        options.add_argument("--disable-browser-side-navigation")
-        options.add_argument("--disable-client-side-phishing-detection")
 
     return options
 
@@ -355,51 +336,48 @@ def _criar_opcoes_chrome(headless_arg: str, conservador: bool = False) -> webdri
 def _lista_argumentos_chrome(headless_arg: str, conservador: bool = False) -> List[str]:
     args = [
         headless_arg,
-        "--user-data-dir=temp-profile",
         "--no-sandbox",
-        "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
         "--disable-gpu",
-        "--disable-software-rasterizer",
         "--window-size=1920,1080",
-        "--remote-debugging-port=9222",
-        "--disable-background-networking",
-        "--disable-background-timer-throttling",
-        "--disable-backgrounding-occluded-windows",
-        "--disable-breakpad",
-        "--disable-component-update",
-        "--disable-features=Translate,BackForwardCache,VizDisplayCompositor,UseSkiaRenderer",
-        "--disable-renderer-backgrounding",
         "--disable-translate",
-        "--mute-audio",
     ]
 
     if conservador:
         args.extend([
             "--disable-extensions",
             "--disable-sync",
-            "--disable-default-apps",
-            "--log-level=3",
-            "--disable-logging",
-            "--single-process",
-            "--no-zygote",
         ])
     else:
         args.extend([
             "--disable-blink-features=AutomationControlled",
             "--no-first-run",
             "--no-default-browser-check",
-            "--disable-browser-side-navigation",
-            "--disable-client-side-phishing-detection",
         ])
 
     return args
 
 
 def _criar_webdriver(options: webdriver.ChromeOptions, chromedriver_path: str | None):
-    if chromedriver_path:
-        return webdriver.Chrome(service=Service(chromedriver_path), options=options)
-    return webdriver.Chrome(options=options)
+    log_file = os.path.join(tempfile.gettempdir(), "chromedriver-streamlit.log")
+    service = Service(
+        executable_path=chromedriver_path,
+        log_output=log_file,
+    ) if chromedriver_path else Service(log_output=log_file)
+
+    try:
+        if chromedriver_path:
+            return webdriver.Chrome(service=service, options=options)
+        return webdriver.Chrome(service=service, options=options)
+    except Exception:
+        try:
+            logging.error("ChromeDriver log salvo em: %s", log_file)
+            if os.path.exists(log_file):
+                with open(log_file, "r", encoding="utf-8", errors="ignore") as handle:
+                    logging.error("ChromeDriver log bruto:\n%s", handle.read()[-8000:])
+        except Exception:
+            pass
+        raise
 
 # ==================== SELENIUM ====================
 def criar_driver() -> webdriver.Chrome:
@@ -419,6 +397,7 @@ def criar_driver() -> webdriver.Chrome:
     tentativas = [
         ("--headless=new", False),
         ("--headless", False),
+        ("--headless=chrome", False),
         ("--headless", True),
     ]
     erros = []
